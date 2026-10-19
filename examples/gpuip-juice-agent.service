@@ -1,0 +1,17 @@
+# Example user unit. Adjust paths to the real unpacked package first.
+[Unit]
+Description=Private Juice GPU agent
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+WorkingDirectory=%h/gpu-over-ip/juice-server
+ExecStart=%h/gpu-over-ip/juice-server/agent --address 127.0.0.1:43210 --disable-gpu-metrics
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+UMask=0077
+
+[Install]
+WantedBy=default.target

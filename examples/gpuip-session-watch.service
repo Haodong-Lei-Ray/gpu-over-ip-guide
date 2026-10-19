@@ -1,0 +1,16 @@
+# Optional user unit. Install the script and idempotent session entry first.
+[Unit]
+Description=Private remote Steam session readiness and recovery
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 %h/gpu-over-ip/scripts/server-health.py --root %h/gpu-over-ip/streaming --watch --interval 60
+Restart=on-failure
+RestartSec=5
+LimitNOFILE=65536
+UMask=0077
+
+[Install]
+WantedBy=default.target

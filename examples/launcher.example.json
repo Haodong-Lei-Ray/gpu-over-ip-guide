@@ -7,6 +7,7 @@
   "moonlight_app": "Steam",
   "portable": true,
   "bitrate": 8000,
+  "display_mode": "windowed",
   "sunshine_port": 47989,
   "direct_ssh_fallback": false,
   "direct_ssh_host": "gpu-server.example"

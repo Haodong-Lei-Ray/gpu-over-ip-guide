@@ -123,6 +123,16 @@ pythonw scripts/open_remote_steam.py --config private/launcher.json
 
 `--no-performance-overlay` 只关闭 Moonlight 自身统计。MangoHud、DXVK HUD、Steam 性能监视器分别关闭；不要为去掉屏幕上的 VKD3D 字样删除 D3D12 转译组件。监控启动选项及可选脚本见 `server.md` 与 HTML。
 
+### 每次默认全屏
+
+临时切换：先点击 Moonlight，让它获得焦点，按 **Ctrl + Alt + Shift + X**，再按一次回到窗口。被键鼠捕获困住时可按 Ctrl+Alt+Shift+Z 释放。
+
+希望一键入口今后默认全屏，在本机私有 `launcher.json` 设置 `"display_mode": "fullscreen"`；`windowed` 为窗口，`borderless` 为无边框。下次重新连接生效，不自动断开当前会话。自己手动运行 CLI 时，将 `--display-mode windowed` 换成 `--display-mode fullscreen`。
+
+### 确认远端确实就绪
+
+本地可执行 `python scripts/open_remote_steam.py --config private/launcher.json --check-only`，查看 SSH、会话入口、Steam 与 Sunshine 状态。完整显示/音频检查和可选长驻服务见 server.md 的 C 节。服务器开机自启与当前一键入口的“按需补启动”不同，不能只因退出 SSH 后还在运行就声称已配好开机恢复。
+
 ## 7. 结束与交接
 
 Juice：先正常退出本地应用，确认 renderer 释放，再关闭自己建立的 SSH 隧道。Moonlight：要结束游戏，先在游戏内保存并退出；仅断开画面不会释放游戏显存。

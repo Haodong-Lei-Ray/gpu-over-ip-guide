@@ -155,6 +155,80 @@ GPUIP_ROOT=/home/user/gpu-over-ip GPUIP_GPU_INDEX=0 GPUIP_COMPAT_DATA_PATH=/home
 
 停止顺序：用户保存并退出游戏 → 正常退出专用 Steam → 断开 Moonlight → 停止经 UID/路径校验过的 Sunshine → 专用 Xorg → 私有音频。保留 prefix、证书与配对状态。禁止全局 killall、未知进程的 pkill、GPU reset 或为了清理游戏而重启服务器。
 
+## C. 怎样确认远端持续运行
+
+### C1. 机器、SSH 和应用分三层看
+
+远端机器必须已开机、联网且 SSH 可达。本地“一键远程 Steam”能补启动已经部署的软件，不能替一台断电或没有管理通道的服务器开机。SSH 窗口关闭后，脱离 SSH 启动的后台进程可继续；这不等于机器重启后自动恢复，也不等于服务崩溃会自动重启。
+
+当前默认机制是按需准备：每次点击本地入口，先运行远端幂等 `start-session.sh`，再检查 Steam 和 Sunshine，成功才打开 Moonlight。长期驻留与自动恢复是下面的可选配置，不会因浏览本教程就被自动启用。
+
+### C2. 只读健康检查与一次补启动
+
+将仓库的 `scripts/server-health.py` 安装到自己的 `$HOME/gpu-over-ip/scripts/`。Moonlight 路线检查私有 X 显示、私有音频、Sunshine 端口、本人 Steam 进程以及会话入口：
+
+```sh
+python3 "$HOME/gpu-over-ip/scripts/server-health.py" --root "$HOME/gpu-over-ip/streaming"
+echo "健康检查返回码：$?"
+```
+
+JSON 中 `ready: true` 且返回码 0 表示这些基础检查通过；不代表 Steam 账号已经登录、NVENC 每帧都正常或游戏不会崩溃。端口被其他程序占用等故障仍需按实际日志处理。
+
+需要恢复缺失服务时使用：
+
+```sh
+python3 "$HOME/gpu-over-ip/scripts/server-health.py" --root "$HOME/gpu-over-ip/streaming" --ensure
+```
+
+`--ensure` 只在检查失败时调用已有的 `start-session.sh`，再复查结果，不启动游戏、不重置配对、不杀现有进程。前提是该入口已按 B2 做好归属校验与幂等启动。如果旧进程卡死、端口冲突或 GPU 被占用，它会保留失败状态，不能靠反复启动冒充修复。
+
+Juice 路线使用包含实际 `agent` 的目录：
+
+```sh
+python3 "$HOME/gpu-over-ip/scripts/server-health.py" --route juice --root "$HOME/gpu-over-ip/juice-server"
+```
+
+它核对自己的 agent、回环监听和 agent 的 nofile。实际 renderer 的 GPU 归属和继承上限仍按 A4 验证。
+
+### C3. 可选：用户级开机启动与自动恢复
+
+两个示例 unit 分别对应两条路线，**根据需要安装一个或分别配置，不把它们当成同一项服务**：
+
+- `examples/gpuip-juice-agent.service`：前台运行 Juice agent，异常退出后由 systemd 重启，并设置 nofile。
+- `examples/gpuip-session-watch.service`：前台运行健康巡检，每 60 秒检查并按需调用 `start-session.sh`；自己异常退出由 systemd 重启。仅准备远端 Steam，不启动游戏。
+
+先把示例路径改成自己的真实部署路径，确认入口、权限、GPU 和会话都正确。下面以串流巡检为例，在仓库目录执行：
+
+```sh
+install -Dm644 examples/gpuip-session-watch.service "$HOME/.config/systemd/user/gpuip-session-watch.service"
+systemctl --user daemon-reload
+systemctl --user enable --now gpuip-session-watch.service
+systemctl --user status gpuip-session-watch.service --no-pager
+journalctl --user -u gpuip-session-watch.service -n 30 --no-pager
+```
+
+Juice 则把上面 unit 名换成 `gpuip-juice-agent.service`。包解压布局有额外一层时同步修改 `WorkingDirectory` 与 `ExecStart`；已有同名 agent 先正常停自己的实例，避免端口争抢。硬上限低于 unit 需要的值时，由管理员处理合适的用户管理器限制。
+
+要在服务器重启、用户未登录时也启动 user manager，并在退出登录后保持运行，核对 linger：
+
+```sh
+loginctl show-user "$USER" -p Linger
+# 按服务器策略，由本人或管理员执行；可能需要权限。
+loginctl enable-linger "$USER"
+```
+
+`Linger=yes` 加上已 enable 的 user unit 才构成这里的无登录开机启动方案；仅执行 `nohup`、仅关闭 SSH 或仅 `systemctl --user start` 都不能替代它。无需为验证而立刻重启共享服务器。[systemd 登录驻留说明](https://www.freedesktop.org/software/systemd/man/latest/loginctl.html)。
+
+### C4. 怎么关闭自动驻留
+
+防止下次自动启动而保留当前会话：
+
+```sh
+systemctl --user disable gpuip-session-watch.service
+```
+
+准备立即停止时，先保存退出游戏和专用 Steam，再执行 `systemctl --user stop gpuip-session-watch.service`。默认 systemd 会结束该服务创建的子进程，因此不要在游戏中把它当成纯粹隐藏巡检窗口的开关。Juice 同理先正常关闭自己的客户端应用，再停对应 unit。是否关闭 linger 应考虑该用户其他 user 服务，不默认全局关闭。
+
 ## Agent 交接结果格式
 
 ```text

@@ -74,6 +74,8 @@ def load_config(path: Path):
     if config.get("portable", True) and not (workdir / "portable.dat").is_file():
         raise ValueError("portable.dat missing from Moonlight working directory")
     config["moonlight_workdir"] = str(workdir)
+    if config.get("display_mode", "windowed") not in {"windowed", "fullscreen", "borderless"}:
+        raise ValueError("display_mode must be windowed, fullscreen, or borderless")
     return config
 
 
@@ -136,7 +138,7 @@ def connect_client(config, status):
     if moonlight_running(config["moonlight_exe"]):
         return "远端 Steam 已就绪；Moonlight 已打开，请切回该窗口。"
     status("Steam 已就绪，正在打开 Moonlight…")
-    command = [config["moonlight_exe"], "stream", "--1080", "--fps", "60", "--bitrate", str(int(config.get("bitrate", 8000))), "--video-codec", "H.264", "--video-decoder", "hardware", "--no-hdr", "--display-mode", "windowed", "--no-performance-overlay", "--no-absolute-mouse", config["moonlight_host"], config["moonlight_app"]]
+    command = [config["moonlight_exe"], "stream", "--1080", "--fps", "60", "--bitrate", str(int(config.get("bitrate", 8000))), "--video-codec", "H.264", "--video-decoder", "hardware", "--no-hdr", "--display-mode", config.get("display_mode", "windowed"), "--no-performance-overlay", "--no-absolute-mouse", config["moonlight_host"], config["moonlight_app"]]
     subprocess.Popen(command, cwd=config["moonlight_workdir"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, creationflags=HIDDEN)
     return "已打开远端 Steam。请在游戏库选择你要玩的游戏。"
 
