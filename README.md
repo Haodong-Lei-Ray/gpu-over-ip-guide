@@ -2,6 +2,8 @@
 
 面向人类操作者和两端 agent 的远程 GPU 实践手册。包含真正的图形 API 转发，以及远端运行游戏、回传视频的备选方案。公开版本中的主机、账号、目录与 GPU 地址均为示例。
 
+**[在线操作手册 / 项目官网](https://haodong-lei-ray.github.io/gpu-over-ip-guide/)** · [本地 client agent](client.md) · [远端 server agent](server.md)
+
 ## 从哪里开始
 
 | 文件 | 读者 | 作用 |
@@ -77,7 +79,7 @@ Juice 的当前官方 FAQ 说明 Windows 客户端可使用 Linux GPU 运行图�
 
 发布前运行 `python scripts/audit_public.py`。它检查常见凭据、非示例 IPv4、个人 Windows 目录、GPU UUID、禁止的运行态文件及 Markdown 文件数量；这是辅助检查，不能替代人工审阅。新增文件应显式 `git add`，不要对包含运行环境的父目录执行 `git add .`。
 
-网站使用 GitHub Pages，从 `main` 分支根目录发布 `index.html`；`.nojekyll` 保留原始静态文件。公开仓库可使用 GitHub Free 的 Pages 项目地址 `https://<owner>.github.io/<repository>/`，无需购买域名。[GitHub Pages 说明](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)。网页没有本项目的外部统计代码；托管平台的基础访问日志由平台自身处理。
+网站使用 GitHub Pages，从 `main` 分支根目录发布 `index.html`；`.nojekyll` 保留原始静态文件。公开仓库可使用 GitHub Free 的 Pages 项目地址 `https://<owner>.github.io/<repository>/`，无需购买域名。[GitHub Pages 说明](https://docs.github.com/en/pages/getting-started-with-github-pages/what-is-github-pages)。Pages 地址用于静态手册；GPU 连接仍使用读者自己的网络与 SSH。网页没有本项目的外部统计代码；托管平台的基础访问日志由平台自身处理。
 
 ## 上游资料
 
