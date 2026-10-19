@@ -1,0 +1,13 @@
+{
+  "ssh_alias": "gpu-server",
+  "remote_root": "/home/user/gpu-over-ip/streaming",
+  "moonlight_exe": "C:\\gpu-over-ip\\moonlight\\Moonlight.exe",
+  "moonlight_workdir": "C:\\gpu-over-ip\\moonlight",
+  "moonlight_host": "gpu-server.example",
+  "moonlight_app": "Steam",
+  "portable": true,
+  "bitrate": 8000,
+  "sunshine_port": 47989,
+  "direct_ssh_fallback": false,
+  "direct_ssh_host": "gpu-server.example"
+}

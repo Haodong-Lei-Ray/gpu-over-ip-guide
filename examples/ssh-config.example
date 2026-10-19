@@ -1,0 +1,6 @@
+Host gpu-server
+    HostName gpu-server.example
+    User remote-user
+    Port 22
+    ServerAliveInterval 15
+    ServerAliveCountMax 3
