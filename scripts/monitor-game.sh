@@ -13,7 +13,12 @@ case "$mode" in off|hud|log) shift ;; *) echo 'Usage: monitor-game.sh off|hud|lo
 [ -d "$GPUIP_COMPAT_DATA_PATH/pfx" ] || { echo 'Existing pfx not found; configure the game prefix first' >&2; exit 2; }
 ulimit -n 65536
 export STEAM_COMPAT_DATA_PATH="$GPUIP_COMPAT_DATA_PATH"
-export VKD3D_VULKAN_DEVICE="$GPUIP_GPU_INDEX"
+if [ "${GPUIP_DEVICE_VIEW:-0}" = 1 ]; then
+    # The private Steam view exposes one Vulkan adapter; its local ordinal is 0.
+    export VKD3D_VULKAN_DEVICE=0
+else
+    export VKD3D_VULKAN_DEVICE="$GPUIP_GPU_INDEX"
+fi
 export VK_ICD_FILENAMES="${GPUIP_NVIDIA_ICD:-/usr/share/vulkan/icd.d/nvidia_icd.json}"
 [ -r "$VK_ICD_FILENAMES" ] || { echo 'NVIDIA ICD not readable; set GPUIP_NVIDIA_ICD' >&2; exit 2; }
 layers=":${VK_INSTANCE_LAYERS:-}:"

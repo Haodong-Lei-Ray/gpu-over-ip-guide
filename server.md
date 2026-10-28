@@ -251,7 +251,7 @@ systemctl --user disable gpuip-session-watch.service
 | `runtime/pulse/native` / `config/pulse-cookie` | 专用音频 socket 与 cookie |
 | `config/gpu-selection.json` | 此后端生成的真实 index、UUID、PCI、DRM 映射，只保留在服务器 |
 
-示例实现固定 `:93` 和 Sunshine 回环检查端口 `47989`；不同显示/端口时统一修改后端、客户端与启动脚本。不要用监听端口代替完整进程归属检查。`stop-owned.py` 须先验证 PID/UID/实际 executable，再停止已验证的进程或自己的进程组；保存的 PID 被复用时拒绝操作。
+示例实现固定 `:93`；Sunshine 回环检查读取私有 `config/sunshine.conf` 中的 `port`，缺省 `47989`。不同显示/端口时统一配置后端、客户端与启动脚本。不要用监听端口代替完整进程归属检查。`stop-owned.py` 须先验证 PID/UID/实际 executable，再停止已验证的进程或自己的进程组；保存的 PID 被复用时拒绝操作。
 
 在仓库目录部署源码（不包含游戏、账户、凭据）：
 
@@ -259,6 +259,7 @@ systemctl --user disable gpuip-session-watch.service
 streamRoot=/home/user/gpu-over-ip/streaming
 install -d -m700 "$streamRoot/scripts/gpu-selector" "$streamRoot/config" "$streamRoot/logs"
 install -m700 scripts/gpu-selector/gpu_control.py scripts/gpu-selector/process_aliases.py scripts/gpu-selector/nvidia_smi_names.py scripts/gpu-selector/gpu-env.sh "$streamRoot/scripts/gpu-selector/"
+install -m700 scripts/gpu-selector/steam_device_view.py "$streamRoot/scripts/gpu-selector/"
 install -m700 scripts/session_shutdown.py "$streamRoot/scripts/session_shutdown.py"
 install -m700 scripts/gpu-selector/vulkan-devices.py "$streamRoot/scripts/vulkan-devices.py"
 # 已有自己的 start-session.sh 等入口，并确认专用会话已停止后：
@@ -300,6 +301,18 @@ source "$GPUIP_STREAM_ROOT/scripts/gpu-selector/gpu-env.sh"
 ```
 
 环境 helper 通过 Vulkan device UUID 匹配枚举 ordinal，再设置 `VKD3D_VULKAN_DEVICE`，避免把 nvidia-smi 编号直接假定成 Vulkan 编号。CUDA 可见性不会自动限制所有图形 API；OpenGL 跟随 Xorg，VKD3D 使用对应的显式选择。DXVK、原生 Vulkan 或自行记忆适配器的游戏仍需按自己的运行时核验和适配，不能声明所有应用都已硬隔离。
+
+**让 steamwebhelper 也跟随渲染卡**：仅有 CUDA / VKD3D 环境变量时，CEF 初始化仍可能在 GPU 0 建立少量上下文，即使带有 `-cef-disable-gpu`。本仓库的 `steam_device_view.py` 为整棵专用 Steam 进程树创建私有设备视图：保留所选 NVIDIA 设备，将其他 GPU 的 NVIDIA / DRM 节点在该视图内遮蔽，避免子进程自行使用其他卡。它先核对 UUID、PCI 和驱动报告的 device minor，不假定 GPU index 等于 minor。主机设备、共享作业和独立启动的 Sunshine 保持原样；这用于选卡，不宣称是不可信程序的安全边界。
+
+需要可用的 Bubblewrap 和用户命名空间。脚本优先使用系统 `bwrap`，也能使用本指南目录中的 Steam Runtime `srt-bwrap`；缺依赖或身份映射不符时明确失败。保留 `run-steam.sh` 现有网络、音频、库路径与其他必要环境，将最后的 Steam 执行行改为下面的形式；不要覆盖整个入口，也不要直接修改 Steam 自带的 webhelper 文件：
+
+```sh
+exec python3 "$GPUIP_STREAM_ROOT/scripts/gpu-selector/steam_device_view.py" \
+  --root "$GPUIP_STREAM_ROOT" -- \
+  "$GPUIP_STREAM_ROOT/runtime/steam-client/steam.sh" -tcp -cef-disable-gpu "$@"
+```
+
+每次启动都重新读取当前 `render_index` / UUID / PCI，编码 GPU 仍由独立 Sunshine 入口设置。私有设备视图内只剩一个可访问的 Vulkan GPU，`VKD3D_VULKAN_DEVICE` 为 **0**，不是宿主机的 NVIDIA index；游戏 wrapper 必须保留这一约定。本仓库 `monitor-game.sh` 会在 `GPUIP_DEVICE_VIEW=1` 时自动沿用 0。外部固定索引 wrapper 须相应适配。验证时查看原始 `/usr/bin/nvidia-smi`：Steam 主进程和全部 `steamwebhelper` 应位于所选渲染卡，Sunshine 位于所选编码卡。已有会话须先保存退出游戏，再正常重启专用 Steam 才能应用。
 
 **幂等和进程识别**：已有 Steam 用 `/proc/<pid>/exe` 的真实路径及 UID 检测，不依赖 `argv[0]` 是否叫 steam；启动名变化不应重复打开客户端。Sunshine、Xorg 的 PID 归属检查也不能因显示别名而失效。切卡前先检查游戏，再正常退出自己的 Steam，再停止自己的 Sunshine/显示；如果游戏出现或 Steam 无法正常退出就停止后续操作。
 

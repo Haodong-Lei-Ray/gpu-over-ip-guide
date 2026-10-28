@@ -22,6 +22,7 @@
 - `scripts/server_profiles.py`：多服务器列表、SSH 主机/用户/端口配置和启动时选择；私有配置见 `examples/servers.example.json`。
 - `scripts/open_remote_steam.py` + `quick_start.py`：按真实可执行文件与 UID 识别 Steam，已就绪时只读检测后直接连接；`--choose-gpu` 主动打开选卡。
 - `scripts/gpu_picker.py` + `scripts/gpu-selector/`：分别选择 Steam/游戏渲染 GPU 和 Sunshine NVENC GPU，显示显存、GPU/编码利用率、温度、功耗、PID；游戏运行时拒绝切卡。
+- `scripts/gpu-selector/steam_device_view.py`：通过 Bubblewrap 私有设备视图，让 Steam 和全部 `steamwebhelper` 跟随渲染卡；编码卡继续由独立 Sunshine 进程选择，集成方法见 server.md。
 - `scripts/close_remote_steam.py`：选择目标服务器后正常关闭专用会话；不关闭服务器或强制结束游戏。
 - `process_aliases.py` / `nvidia_smi_names.py`：界面与可选终端包装使用一致的 `python1`、`python2` 显示别名；真实名称仍可查看，不修改程序、驱动或其他用户的进程。
 
@@ -58,6 +59,7 @@ Windows: Moonlight
 - Windows 10/11、OpenSSH、PowerShell；Linux NVIDIA 驱动与 Vulkan loader。
 - Juice 历史社区发行版：`2023.08.10-2103.0633b794`。固定 client/server 同一版本，使用 `juicify.exe` 与 `agent`。这不是当前商业版本的安装说明，也不绕过任何版本的组织、许可证或登录验证。
 - 串流备选：Sunshine、Moonlight、私有 Xorg、Openbox、PulseAudio、Steam、GE-Proton、VKD3D-Proton/DXVK。
+- Steam 子进程选卡：可选 Bubblewrap 私有设备视图，按 UUID / PCI / device minor 验证映射，不修改主机驱动或设备。
 - 可选监控：MangoHud。Moonlight 统计衡量视频链路，MangoHud 衡量应用提交，二者不能互相代替。
 - 原始实践曾使用 Moonlight 6.2、Sunshine 0.23.1、GE-Proton9-27、MangoHud 0.6.5。它们是兼容性基线，**不是对所有新机器的推荐最新版**。选择版本前检查上游说明、当前驱动和已知安全问题。
 

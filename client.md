@@ -143,6 +143,8 @@ python scripts/open_remote_steam.py --servers private/servers.json --server lab-
 
 渲染卡用于私有 Xorg/Steam 与游戏环境；编码卡通过 Sunshine 的 `CUDA_VISIBLE_DEVICES` 选择 NVENC，可以与渲染卡相同。跨卡仍有图像复制成本，不承诺更快。Steam 少量辅助进程与有自身选卡逻辑的应用须以真实 GPU 进程核验，不能只凭界面配置证明所有子进程都被硬隔离。
 
+如果 `steamwebhelper` 仍出现在 GPU 0，让 server agent 按 server.md 的“让 steamwebhelper 也跟随渲染卡”步骤集成私有设备视图，并正常重启专用 Steam。它让整个 Steam 进程树跟随当前渲染卡，Sunshine 继续使用单独选择的编码卡；不通过显示别名掩盖实际 GPU 位置。
+
 选择变更会正常退出专用 Steam、重启自己的显示/串流，游戏仍在运行时拒绝切换；不会强制结束游戏、重置 GPU 或停止其他计算作业。CLI 可以先只读计划：
 
 ```powershell
