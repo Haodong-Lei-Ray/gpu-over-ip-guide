@@ -18,6 +18,8 @@
 
 ## 本次同步的入口与脚本
 
+多服务器管理目前支持逐台选择和操作；远端游戏可以分别保持运行，但本地只支持一个 Moonlight 串流会话，尚未实现同时显示两台服务器的游戏窗口。详见 [client.md](client.md#多台服务器能否同时玩)。
+
 - `scripts/steam_manager.py`：统一管理窗口；选服务器、四卡状态、连接/启动、独立选卡和关闭共用同一界面，关闭前重新检测所选主机。
 - `scripts/server_profiles.py`：多服务器列表、SSH 主机/用户/端口配置和启动时选择；私有配置见 `examples/servers.example.json`。
 - `scripts/open_remote_steam.py` + `quick_start.py`：按真实可执行文件与 UID 识别 Steam，已就绪时只读检测后直接连接；`--choose-gpu` 主动打开选卡。
