@@ -257,6 +257,7 @@ systemctl --user disable gpuip-session-watch.service
 streamRoot=/home/user/gpu-over-ip/streaming
 install -d -m700 "$streamRoot/scripts/gpu-selector" "$streamRoot/config" "$streamRoot/logs"
 install -m700 scripts/gpu-selector/gpu_control.py scripts/gpu-selector/process_aliases.py scripts/gpu-selector/nvidia_smi_names.py scripts/gpu-selector/gpu-env.sh "$streamRoot/scripts/gpu-selector/"
+install -m700 scripts/session_shutdown.py "$streamRoot/scripts/session_shutdown.py"
 install -m700 scripts/gpu-selector/vulkan-devices.py "$streamRoot/scripts/vulkan-devices.py"
 # 已有自己的 start-session.sh 等入口，并确认专用会话已停止后：
 python3 "$streamRoot/scripts/gpu-selector/gpu_control.py" --root "$streamRoot" init --render 0 --stream 0
@@ -299,6 +300,8 @@ source "$GPUIP_STREAM_ROOT/scripts/gpu-selector/gpu-env.sh"
 环境 helper 通过 Vulkan device UUID 匹配枚举 ordinal，再设置 `VKD3D_VULKAN_DEVICE`，避免把 nvidia-smi 编号直接假定成 Vulkan 编号。CUDA 可见性不会自动限制所有图形 API；OpenGL 跟随 Xorg，VKD3D 使用对应的显式选择。DXVK、原生 Vulkan 或自行记忆适配器的游戏仍需按自己的运行时核验和适配，不能声明所有应用都已硬隔离。
 
 **幂等和进程识别**：已有 Steam 用 `/proc/<pid>/exe` 的真实路径及 UID 检测，不依赖 `argv[0]` 是否叫 steam；启动名变化不应重复打开客户端。Sunshine、Xorg 的 PID 归属检查也不能因显示别名而失效。切卡前先检查游戏，再正常退出自己的 Steam，再停止自己的 Sunshine/显示；如果游戏出现或 Steam 无法正常退出就停止后续操作。
+
+关闭和切卡共用 `session_shutdown.py`：先执行 Steam 的 `-shutdown`，等待退出；未响应时再次检查游戏，并按真实 executable、UID 和 Linux 进程启动时间核对主进程 PID，然后只向该主进程发送 SIGTERM。不会按名称批量结束 `python` / `steamwebhelper`，不会结束未知进程组，也不自动升级到 SIGKILL。若仍未退出，保留串流并报告失败。`steamwebhelper` 是界面子进程，单独杀掉可能被仍在运行的主进程重建。
 
 ### D3. 先计划，再验收
 

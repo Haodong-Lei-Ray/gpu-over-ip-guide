@@ -15,6 +15,9 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 from process_aliases import aliases_for
+import sys
+sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
+from session_shutdown import stop_steam
 
 
 def run(args, **kwargs):
@@ -176,15 +179,7 @@ def stop_session(root):
     if games(root): raise RuntimeError('GAME_RUNNING: Save and exit the game first')
     if run(['systemctl','--user','is-active','--quiet','gpuip-session-watch.service'], timeout=4).returncode == 0:
         raise RuntimeError('WATCHER_ACTIVE: Stop the dedicated recovery watcher first')
-    if steam_pids(root):
-        with (root/'logs/gpu-switch.log').open('ab') as log:
-            try:
-                subprocess.run(['bash',str(root/'scripts/run-steam.sh'),'-shutdown'],stdout=log,stderr=log,timeout=12)
-            except subprocess.TimeoutExpired: pass
-        for _ in range(40):
-            if not steam_pids(root): break
-            time.sleep(1)
-        if steam_pids(root): raise RuntimeError('STEAM_STILL_RUNNING: Exit Steam manually before switching')
+    stop_steam(root,lambda: bool(games(root)))
     if games(root): raise RuntimeError('GAME_RUNNING: A game started; stream left intact')
     for kind in ['sunshine', 'display']:
         pid = saved_pid(root, kind)

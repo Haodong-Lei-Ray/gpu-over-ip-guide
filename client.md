@@ -196,3 +196,5 @@ Juice：先正常退出本地应用，确认 renderer 释放，再关闭自己�
 5. 黑屏：区分加载、游戏退出、Steam 退出、串流断线；留存私有日志，不上传崩溃转储。
 
 参考：[Juice release 参数变更](https://github.com/Juice-Labs/Juice-Labs/releases/tag/2023.08.10-2103.0633b794)、[Moonlight 官方快捷键](https://github.com/moonlight-stream/moonlight-docs/wiki/Setup-Guide#keyboardmousegamepad-input-options)。
+
+关闭说明：Steam 登录/网页界面卡住时，普通退出命令可能没有响应。管理器会在确认没有游戏、主进程路径/UID/启动时间匹配后，仅向专用 Steam 主进程发送 SIGTERM，再验证 Steam 和串流都已停止。不要通过反复杀 `steamwebhelper` 子进程来判断是否退出；旧管理器窗口需要关闭重开才能载入修复。

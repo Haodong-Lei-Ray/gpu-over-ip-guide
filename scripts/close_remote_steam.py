@@ -75,17 +75,9 @@ if state['game_running']:
     raise SystemExit('GAME_RUNNING: Please save and exit the remote game first. Nothing was stopped.')
 if state['watcher_active']:
     raise SystemExit('WATCHER_ACTIVE: Automatic session recovery is enabled. Stop that supervisor before closing this session.')
-# Request ordinary Steam exit, never kill its process group or force-close a game.
-if state['steam_running']:
-    logdir=root/'logs';logdir.mkdir(exist_ok=True)
-    with (logdir/'one-click-stop.log').open('ab') as log:
-        try:
-            subprocess.run(['/bin/bash',str(root/'scripts/run-steam.sh'),'-shutdown'],stdout=log,stderr=subprocess.STDOUT,timeout=12)
-        except subprocess.TimeoutExpired:pass
-    for _ in range(40):
-        if not steam_pids():break
-        time.sleep(1)
-    if steam_pids():raise SystemExit('STEAM_STILL_RUNNING: Steam did not exit normally; streaming was left running.')
+# Steam may ignore IPC while its login/web UI is unresponsive. Use a verified
+# master-PID SIGTERM fallback; never kill arbitrary steamwebhelper or GPU jobs.
+shutdown=stop_steam(root,game_running)
 if game_running():raise SystemExit('GAME_RUNNING: A game appeared during shutdown; streaming was left running.')
 for kind in ('sunshine','display'):
     if saved_alive(kind):
@@ -97,7 +89,7 @@ audio_env=os.environ.copy();audio_env.update(PULSE_SERVER='unix:'+str(root/'runt
 try:
     subprocess.run(['pactl','exit'],env=audio_env,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,timeout=5)
 except (OSError,subprocess.TimeoutExpired):pass
-final=inspect();final['stopped']=not any(final[k] for k in ('steam_running','sunshine_running','display_running'))
+final=inspect();final['stopped']=not any(final[k] for k in ('steam_running','sunshine_running','display_running'));final['steam_shutdown']=shutdown
 print(json.dumps(final))
 if not final['stopped']:raise SystemExit(1)
 '''
@@ -105,7 +97,8 @@ if not final['stopped']:raise SystemExit(1)
 
 def remote(config, check_only=False):
     parameters={'remote_root':config['remote_root'],'check_only':check_only}
-    code='import json\nconfig=json.loads('+repr(json.dumps(parameters))+')\n'+REMOTE
+    shutdown_code=Path(__file__).with_name('session_shutdown.py').read_text(encoding='utf-8')
+    code='import json\nconfig=json.loads('+repr(json.dumps(parameters))+')\n'+shutdown_code+'\n'+REMOTE
     base=['ssh','-o','BatchMode=yes','-o','ConnectTimeout=8','-o','ServerAliveInterval=10','-o','ServerAliveCountMax=2']
     base+=ssh_options(config)
     result=subprocess.run(base+[config['ssh_alias'],'python3','-'],input=code,capture_output=True,text=True,encoding='utf-8',errors='replace',timeout=115,creationflags=HIDDEN)
@@ -117,7 +110,7 @@ def remote(config, check_only=False):
         logging.error('Remote stop failed: %s',error)
         if 'GAME_RUNNING' in error:raise RuntimeError('检测到远端游戏仍在运行。请先保存并正常退出游戏，再运行此脚本。')
         if 'WATCHER_ACTIVE' in error:raise RuntimeError('检测到自动恢复守护正在运行。请先停止该守护，避免关闭后自动重启。')
-        if 'STEAM_STILL_RUNNING' in error:raise RuntimeError('Steam 未能正常退出。串流已保留，请在远端 Steam 内手动退出后再试。')
+        if 'STEAM_STILL_RUNNING' in error:raise RuntimeError('Steam 未响应退出命令和主进程 SIGTERM。串流已保留；请查看私有关闭日志，不要反复结束界面子进程。')
         raise RuntimeError('远端关闭未完成，请查看本机 private/close-remote-steam.log；没有执行服务器关机或强制结束游戏。')
     return json.loads(result.stdout.strip().splitlines()[-1])
 
