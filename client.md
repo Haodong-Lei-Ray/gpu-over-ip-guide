@@ -131,6 +131,8 @@ pythonw scripts/open_remote_steam.py --servers private/servers.json --server lab
 python scripts/open_remote_steam.py --servers private/servers.json --server lab-a --check-only
 ```
 
+本管理器当前的启停 / 选卡适配针对本指南的 Sunshine 专用会话。`connection.backend` 默认是 `sunshine`；可以将 Wolf 等其他后端的信息存入配置（例如 `"backend": "wolf"`），但界面会标注待接入并禁用 Sunshine 控制，不能仅凭 SSH 能连通就声称该后端已配置可用。
+
 ### 分别选择游戏渲染与串流编码 GPU
 
 前提：远端已完成 server.md 的 D 节集成。四卡窗口显示实际枚举到的所有 GPU，不限定恰好四张；每 10 秒刷新显存、GPU/编码利用率、温度、功耗与进程。同一 PID 的 `python*` 别名跨卡一致，详情保留 PID、原始进程名与显存。

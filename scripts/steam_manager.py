@@ -10,6 +10,9 @@ from gpu_picker import request, reconnect_client
 
 
 def inspect_server(config):
+    if config.get('backend','sunshine')!='sunshine':
+        return {'ready':{'steam_ready':None,'sunshine_ready':None,'display_ready':None},'gpu':None,
+                'unsupported':True,'gpu_error':'此服务器使用 '+config['backend']+'，SSH 信息已载入。启动、选卡和关闭需要对应管理适配器，不会套用 Sunshine 脚本。'}
     ready=prepare_remote(config,lambda _:None,check_only=True)
     try:
         gpu=request(config)
@@ -19,6 +22,7 @@ def inspect_server(config):
 
 
 def connect_server(config,render=None,stream=None,apply_gpus=False):
+    if config.get('backend','sunshine')!='sunshine':raise RuntimeError('此服务器的串流后端尚未接入管理器，不能执行 Sunshine 启动脚本。')
     current=prepare_remote(config,lambda _:None,check_only=True)
     if current['steam_ready'] and not apply_gpus:
         if not current['sunshine_ready'] or not current.get('display_ready',True):
@@ -31,6 +35,7 @@ def connect_server(config,render=None,stream=None,apply_gpus=False):
 
 
 def close_server(config):
+    if config.get('backend','sunshine')!='sunshine':raise RuntimeError('此服务器的串流后端尚未接入管理器，不能执行 Sunshine 关闭脚本。')
     from close_remote_steam import remote
     current=remote(config,check_only=True)
     if not any(current[k] for k in ('steam_running','sunshine_running','display_running')):
@@ -89,8 +94,9 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
         idle=not state['busy'];snapshot=state['snapshot'];gpu=snapshot and snapshot['gpu']
         server_box.configure(state='disabled' if state['operation'] else 'readonly')
         for button in [reload_button,refresh_button]:button.configure(state='normal' if idle else 'disabled')
-        connect_button.configure(state='normal' if idle and snapshot else 'disabled')
-        close_button.configure(state='normal' if idle and snapshot else 'disabled')
+        supported=snapshot and not snapshot.get('unsupported')
+        connect_button.configure(state='normal' if idle and supported else 'disabled')
+        close_button.configure(state='normal' if idle and supported else 'disabled')
         apply_button.configure(state='normal' if idle and gpu else 'disabled')
         for box in [render_box,stream_box]:box.configure(state='readonly' if idle and gpu else 'disabled')
     def details_changed(_event=None):
@@ -116,7 +122,10 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
         health.set('Steam：'+('运行中' if r['steam_ready'] else '未启动')+'   Sunshine：'+('就绪' if r['sunshine_ready'] else '未就绪')+'   桌面：'+('就绪' if r.get('display_ready') else '未就绪')+'   更新 '+time.strftime('%H:%M:%S'))
         if not gpu:
             for item in tree.get_children():tree.delete(item)
-            render.set('');stream.set('');note.set('选卡后端不可用。已运行的 Steam 仍可连接；启动选卡需要 server agent 先完成部署。')
+            render.set('');stream.set('')
+            if value.get('unsupported'):
+                health.set('服务器配置已载入 · 串流后端待接入管理器');note.set(value['gpu_error']);return
+            note.set('选卡后端不可用。已运行的 Steam 仍可连接；启动选卡需要 server agent 先完成部署。')
             logging.warning('GPU status unavailable: %s',value['gpu_error']);return
         old_render=render.get().split(' · ',1)[0];old_stream=stream.get().split(' · ',1)[0]
         selection=gpu['selection'];labels={}

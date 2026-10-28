@@ -103,5 +103,13 @@ class ManagerTests(unittest.TestCase):
             args=run.call_args.args[0]
             self.assertIn('HostName=gpu-b.example',args);self.assertIn('2222',args);self.assertIn('lab-b',args)
 
+    def test_other_backend_never_runs_sunshine_control(self):
+        c=dict(self.config,backend='wolf')
+        with patch.object(steam_manager,'prepare_remote') as probe,patch.object(steam_manager,'request') as apply,patch.object(close_remote_steam,'remote') as stop:
+            self.assertTrue(steam_manager.inspect_server(c)['unsupported'])
+            with self.assertRaises(RuntimeError):steam_manager.connect_server(c,0,1)
+            with self.assertRaises(RuntimeError):steam_manager.close_server(c)
+            probe.assert_not_called();apply.assert_not_called();stop.assert_not_called()
+
 
 if __name__=='__main__':unittest.main()
