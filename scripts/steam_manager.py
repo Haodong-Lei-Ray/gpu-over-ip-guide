@@ -50,6 +50,7 @@ def close_server(config):
 def show_manager(profiles,default,config_path,startup_action='connect'):
     import tkinter as tk
     from tkinter import ttk,messagebox
+    from copyable_ui import readonly_text,enable_copy,put_clipboard,window_text
     app=tk.Tk();app.title('远程 Steam 管理器');app.geometry('1100x760');app.minsize(1000,700)
     style=ttk.Style(app);style.theme_use('clam');style.configure('Treeview',rowheight=34,font=('Microsoft YaHei UI',10))
     frame=ttk.Frame(app,padding=22);frame.pack(fill='both',expand=True)
@@ -60,8 +61,8 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
     selected=tk.StringVar();server_box=ttk.Combobox(bar,textvariable=selected,state='readonly',width=43);server_box.pack(side='left')
     reload_button=ttk.Button(bar,text='重新加载配置');reload_button.pack(side='left',padx=10)
     refresh_button=ttk.Button(bar,text='刷新状态');refresh_button.pack(side='right')
-    connection=tk.StringVar();ttk.Label(frame,textvariable=connection,wraplength=1000).pack(anchor='w',pady=(10,5))
-    health=tk.StringVar(value='正在读取所选服务器状态…');ttk.Label(frame,textvariable=health,font=('Microsoft YaHei UI',11,'bold')).pack(anchor='w',pady=(0,12))
+    connection=tk.StringVar();readonly_text(frame,textvariable=connection,max_lines=2).pack(fill='x',pady=(10,5))
+    health=tk.StringVar(value='正在读取所选服务器状态…');readonly_text(frame,textvariable=health,font=('Microsoft YaHei UI',11,'bold'),max_lines=2).pack(fill='x',pady=(0,12))
     columns=[('id','GPU',60),('memory','显存 已用 / 总量',155),('util','GPU',60),('enc','编码',60),('temp','温度',60),('power','功耗',75),('process','运行进程',330),('role','当前配置',130)]
     tree=ttk.Treeview(frame,columns=[v[0] for v in columns],show='headings',height=4,selectmode='browse')
     for key,title,width in columns:tree.heading(key,text=title);tree.column(key,width=width,minwidth=40,stretch=key=='process')
@@ -73,7 +74,7 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
     render_box=ttk.Combobox(row,textvariable=render,state='disabled',width=37);render_box.grid(row=1,column=0,padx=(0,35),pady=6)
     stream_box=ttk.Combobox(row,textvariable=stream,state='disabled',width=37);stream_box.grid(row=1,column=1,pady=6)
     note=tk.StringVar(value='显卡状态每 10 秒刷新；变更显卡前请先保存退出游戏。')
-    ttk.Label(frame,textvariable=note,wraplength=1010,foreground='#856025').pack(anchor='w',pady=(0,10))
+    readonly_text(frame,textvariable=note,max_lines=2).pack(fill='x',pady=(0,10))
     ttk.Label(frame,text='进程详情（名称用 python* 别名显示，原始名称在这里核对）').pack(anchor='w')
     details=tk.Text(frame,height=5,font=('Microsoft YaHei UI',9),wrap='word',relief='flat');details.pack(fill='both',expand=True,pady=(5,12));details.configure(state='disabled')
     actions=ttk.Frame(frame);actions.pack(fill='x')
@@ -81,8 +82,15 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
     apply_button=ttk.Button(actions,text='应用所选 GPU 并连接');apply_button.pack(side='left',padx=10)
     close_button=ttk.Button(actions,text='关闭所选服务器的会话');close_button.pack(side='right')
     message=tk.StringVar(value='选择服务器后操作。关闭前会重新检测状态，不关闭服务器或其他计算作业。')
-    ttk.Label(frame,textvariable=message,wraplength=1020).pack(anchor='w',pady=(12,4))
-    ttk.Label(frame,text='私有配置：'+str(config_path),wraplength=1020,foreground='#617169').pack(anchor='w')
+    readonly_text(frame,textvariable=message,max_lines=3).pack(fill='x',pady=(12,4))
+    readonly_text(frame,text='私有配置：'+str(config_path),max_lines=1).pack(fill='x')
+    ttk.Label(frame,text='文字可选中后 Ctrl+C；表格 Ctrl+C 复制行；任意区域右键可复制全部。',font=('Microsoft YaHei UI',9)).pack(anchor='w',pady=(4,0))
+    def copy_all():put_clipboard(app,window_text(app))
+    ttk.Button(bar,text='复制全部信息',command=copy_all).pack(side='right',padx=(0,8))
+    def copy_error():
+        from copyable_ui import put_clipboard
+        put_clipboard(app,message.get())
+    ttk.Button(actions,text='复制状态 / 错误',command=copy_error).pack(side='left',padx=(0,8))
     events=queue.Queue();state={'profiles':profiles,'busy':False,'operation':False,'snapshot':None,'next':0,'generation':0}
 
     def current():return next(p for p in state['profiles'] if ('['+p['id']+'] '+p['name'])==selected.get())
@@ -126,6 +134,7 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
             if value.get('unsupported'):
                 health.set('服务器配置已载入 · 串流后端待接入管理器');note.set(value['gpu_error']);return
             note.set('选卡后端不可用。已运行的 Steam 仍可连接；启动选卡需要 server agent 先完成部署。')
+            message.set(value['gpu_error'] or '显卡状态不可用，请刷新重试。')
             logging.warning('GPU status unavailable: %s',value['gpu_error']);return
         old_render=render.get().split(' · ',1)[0];old_stream=stream.get().split(' · ',1)[0]
         selection=gpu['selection'];labels={}
@@ -139,10 +148,15 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
             values=(f'GPU {i}',memory,metric(g['utilization'],'%'),metric(g['encoder'],'%'),metric(g['temperature'],'°C'),metric(g['power'],' W'),', '.join(p['alias'] for p in g['processes']) or '空闲',' + '.join(roles) or '—')
             if tree.exists(str(i)):tree.item(str(i),values=values)
             else:tree.insert('','end',iid=str(i),values=values)
-        for box,var,old,role in [(render_box,render,old_render,'render_index'),(stream_box,stream,old_stream,'stream_index')]:
-            box.configure(values=list(labels.values()));var.set(labels.get(old,labels.get('GPU '+str(selection[role]),'')))
+        for box,var,old,role,key in [(render_box,render,old_render,'render_index','default_render_gpu'),(stream_box,stream,old_stream,'stream_index','default_stream_gpu')]:
+            preferred=current()['config'].get(key,selection[role])
+            fallback=labels.get('GPU '+str(preferred),labels.get('GPU '+str(selection[role]),''))
+            box.configure(values=list(labels.values()));var.set(labels.get(old,fallback))
         note.set('检测到游戏运行：可连接，切卡或关闭前请先保存退出游戏。' if gpu['game_pids'] else '已有 Steam 点击连接即可复用。只有“应用所选 GPU”会主动切卡；关闭前会再次检测状态。')
-        if not tree.selection() and gpu['gpus']:tree.selection_set(str(gpu['gpus'][0]['index']))
+        if not tree.selection() and gpu['gpus']:
+            preferred=str(current()['config'].get('default_render_gpu',selection['render_index']))
+            target=preferred if tree.exists(preferred) else str(gpu['gpus'][0]['index'])
+            tree.selection_set(target);tree.focus(target);tree.see(target)
         details_changed()
     def switch(_event=None):
         # Read-only probes may finish after a server change; their generation is discarded.
@@ -187,7 +201,7 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
                 if generation!=state['generation']:continue
                 state['busy']=False;state['operation']=False;state['next']=time.monotonic()+10
                 if kind=='snapshot':draw(value)
-                elif kind=='done':message.set(value);render.set('');stream.set('');fetch()
+                elif kind=='done':message.set(value);fetch()
                 else:
                     message.set(value)
                     if state['snapshot'] is None:health.set('连接失败，请核对配置或稍后刷新。')
@@ -202,4 +216,5 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
     refresh_button.configure(command=fetch);reload_button.configure(command=reload_profiles)
     connect_button.configure(command=lambda:operate('connect'));apply_button.configure(command=lambda:operate('apply'));close_button.configure(command=lambda:operate('close'))
     if startup_action=='stop':message.set('此入口用于关闭：先选择服务器，核对状态，再点击右侧关闭按钮。')
+    enable_copy(app)
     app.protocol('WM_DELETE_WINDOW',close_window);fetch();app.after(150,poll);app.mainloop()

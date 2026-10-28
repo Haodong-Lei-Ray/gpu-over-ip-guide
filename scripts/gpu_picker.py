@@ -34,7 +34,12 @@ def request(config, action='status', render=None, stream=None):
         if 'GAME_RUNNING' in error: raise RuntimeError('远端游戏仍在运行。请先保存并退出游戏，再切换显卡。当前游戏和串流已保留。')
         if 'WATCHER_ACTIVE' in error: raise RuntimeError('远端自动恢复守护正在运行，需要先停止该专用守护才能切卡。')
         if 'STEAM_STILL_RUNNING' in error: raise RuntimeError('Steam 未正常退出。请在远端 Steam 菜单内退出后再试。')
-        raise RuntimeError('连接或选卡失败，请点击刷新重试。详细原因见 private/launcher.log；VPN 未被修改。')
+        details='\n'.join(error.strip().splitlines()[-14:])[-3000:]
+        summary='远端选卡或启动失败。'
+        if result.returncode==255:summary='SSH 连接失败或被远端断开，尚不能判断显卡权限。'
+        elif 'STAGE_TIMEOUT:' in error or 'TimeoutExpired' in error:summary='远端启动阶段超时；请复制下面的具体原因。'
+        elif 'previous session restored' in error:summary='所选配置启动失败，已尝试恢复原配置。'
+        raise RuntimeError(summary+'\n远端详情：\n'+details+'\n完整记录：private/launcher.log；VPN 未被修改。')
     try: return json.loads(result.stdout.strip().splitlines()[-1])
     except (ValueError, IndexError) as error: raise RuntimeError('服务器返回的显卡状态无法解析，请重试。') from error
 

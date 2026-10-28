@@ -48,6 +48,19 @@ class ManagerTests(unittest.TestCase):
         for changes in [{'ssh_port':True},{'ssh_port':70000},{'ssh_hostname':'gpu.example;command'}]:
             with self.assertRaises(ValueError):launcher.validate_config(dict(self.config,**changes))
 
+    def test_default_gpu_indices_validated(self):
+        for key in ('default_render_gpu','default_stream_gpu'):
+            for value in (True,-1,'1',1.5):
+                with self.assertRaises(ValueError):launcher.validate_config(dict(self.config,**{key:value}))
+            self.assertEqual(launcher.validate_config(dict(self.config,**{key:1}))[key],1)
+
+    def test_stage_failure_is_exposed_for_copying(self):
+        error='RuntimeError: Switch failed; previous session restored. STAGE_TIMEOUT: display did not finish in 35 seconds'
+        reply=subprocess.CompletedProcess([],1,stdout='',stderr=error)
+        with patch.object(gpu_picker.subprocess,'run',return_value=reply):
+            with self.assertRaisesRegex(RuntimeError,'STAGE_TIMEOUT: display'):
+                gpu_picker.request(self.config,'apply',1,1)
+
     def test_existing_steam_connects_without_gpu_apply(self):
         with patch.object(steam_manager,'prepare_remote',return_value=self.ready) as prepare,patch.object(steam_manager,'request') as apply,patch.object(steam_manager,'connect_client',return_value='connected'):
             self.assertEqual(steam_manager.connect_server(self.config,0,1),'connected')

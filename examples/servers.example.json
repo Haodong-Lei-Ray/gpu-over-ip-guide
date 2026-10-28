@@ -20,7 +20,9 @@
         "direct_ssh_host": "gpu-a.example",
         "ssh_hostname": "gpu-a.example",
         "ssh_user": "user",
-        "ssh_port": 22
+        "ssh_port": 22,
+        "default_render_gpu": 1,
+        "default_stream_gpu": 1
       }
     },
     {

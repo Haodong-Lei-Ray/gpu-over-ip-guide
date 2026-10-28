@@ -92,6 +92,9 @@ def validate_config(config):
     if 'ssh_port' in config:
         if isinstance(config['ssh_port'],bool) or not isinstance(config['ssh_port'],int) or not 1<=config['ssh_port']<=65535:
             raise ValueError('ssh_port must be an integer from 1 to 65535')
+    for name in ('default_render_gpu','default_stream_gpu'):
+        if name in config and (isinstance(config[name],bool) or not isinstance(config[name],int) or config[name]<0):
+            raise ValueError(name+' must be a nonnegative integer')
     if config.get("display_mode", "windowed") not in {"windowed", "fullscreen", "borderless"}:
         raise ValueError("display_mode must be windowed, fullscreen, or borderless")
     return config

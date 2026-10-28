@@ -107,7 +107,9 @@ export XAUTHORITY="$HOME/gpu-over-ip/private/Xauthority"
 
 用独立 PulseAudio 实例和 Unix socket 创建虚拟 sink，不接管系统默认音频。Sunshine 指向专用 DISPLAY、XAUTHORITY、音频 socket 与配置目录；完成编码器探测、实际短录像和音频回环验证。
 
-启动顺序：**显示 → 私有音频 / D-Bus → Sunshine → 窗口管理器 / Steam**。保存仅属于本项目的进程记录，启动前先验证已存在的实例，避免重复占用端口。原有会话就绪时直接复用。
+启动顺序：**显示 → 私有音频 / D-Bus → 窗口管理器 / Steam → Sunshine**。先让窗口管理器与 Steam 完成 X11 初始化，再让 Sunshine 探测捕获和编码器，避免无头环境下捕获初始化阻塞后续窗口查询。保存仅属于本项目的进程记录，启动前先验证已存在的实例，避免重复占用端口。原有会话就绪时直接复用。
+
+已经部署了四个幂等 `start-display.py`、`start-audio.py`、`start-steam.py`、`start-sunshine.py` 时，可使用 `scripts/start-session-stages.py` 作为编排入口（不是安装器）。在私有 `scripts/start-session.sh` 中通过脚本所在目录调用它。它记录 `START_STAGE` / `READY_STAGE`，逐阶段限时；可选的 `start-transport.py` 会先执行。各 helper 的 `xdpyinfo`、`xprop`、`glxinfo`、`pactl` 等子命令也须限时，Sunshine helper 必须确认本人实例仍存活且实际配置的信息端口已监听才返回成功，不能只固定等待几秒便报告就绪。选卡后端读取 `config/sunshine.conf` 的 `port`（缺省 47989），并将本次启动失败的具体阶段带回客户端。
 
 若使用 client 侧“一键远程 Steam”，server agent 要在私有串流部署目录建立 `scripts/start-session.sh`。约定该目录的 Steam 本体为 `runtime/steam-client/ubuntu12_32/steam`，Sunshine 信息端口默认 47989，日志在 `logs/`。此脚本须逐项检查并复用自己的 display/audio/Sunshine/Steam；首次创建后台进程要脱离 SSH 会话并将输出写入私有日志。返回 0 表示准备请求成功。它只准备 Steam，不调用游戏 AppID，不自动启动游戏。将该目录填入 client 私有 JSON 的 `remote_root`；这些部署脚本由 server agent 根据实际机器准备，仓库没有声称已为读者机器安装好。
 

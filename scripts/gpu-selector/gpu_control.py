@@ -194,13 +194,21 @@ def stop_session(root):
 
 
 def start_session(root):
+    log_path = root/'logs/gpu-switch.log'
+    offset = log_path.stat().st_size if log_path.exists() else 0
     with (root/'logs/gpu-switch.log').open('ab') as log:
         done = subprocess.run(['bash',str(root/'scripts/start-session.sh')],stdout=log,stderr=log,timeout=145)
+    conf = root/'config/sunshine.conf'
+    match = re.search(r'^\s*port\s*=\s*(\d+)\s*$',conf.read_text(),re.M) if conf.exists() else None
+    port = int(match.group(1)) if match else 47989
     try:
-        with socket.create_connection(('127.0.0.1',47989),timeout=2): sunshine=True
+        with socket.create_connection(('127.0.0.1',port),timeout=2): sunshine=True
     except OSError: sunshine=False
     if done.returncode or not steam_pids(root) or not saved_pid(root,'display') or not saved_pid(root,'sunshine') or not sunshine:
-        raise RuntimeError('Dedicated session failed to start; inspect logs/gpu-switch.log')
+        with log_path.open('rb') as log:
+            log.seek(offset);lines=log.read().decode(errors='replace').splitlines()
+        detail=next((line for line in reversed(lines) if 'STAGE_' in line),'readiness check failed')
+        raise RuntimeError('Dedicated session failed to start: '+detail+'; inspect logs/gpu-switch.log')
 
 
 def apply(root, render, stream):
@@ -228,7 +236,7 @@ def apply(root, render, stream):
                 start_session(root)
             except Exception as recovery:
                 raise RuntimeError('Switch failed and recovery needs attention; inspect logs/gpu-switch.log: '+str(recovery)) from error
-            raise RuntimeError('Switch failed; previous session restored. Inspect logs/gpu-switch.log') from error
+            raise RuntimeError('Switch failed; previous session restored. '+str(error)) from error
         result['applied'] = True
         return result
 
