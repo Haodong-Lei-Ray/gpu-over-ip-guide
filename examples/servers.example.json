@@ -1,0 +1,49 @@
+{
+  "default_server": "lab-a",
+  "servers": [
+    {
+      "id": "lab-a",
+      "name": "实验服务器 A",
+      "enabled": true,
+      "connection": {
+        "ssh_alias": "lab-a",
+        "remote_root": "/home/user/gpu-over-ip/streaming",
+        "moonlight_exe": "C:\\gpu-over-ip\\moonlight\\Moonlight.exe",
+        "moonlight_workdir": "C:\\gpu-over-ip\\moonlight",
+        "moonlight_host": "gpu-a.example",
+        "moonlight_app": "Steam",
+        "portable": true,
+        "bitrate": 8000,
+        "display_mode": "windowed",
+        "sunshine_port": 47989,
+        "direct_ssh_fallback": false,
+        "direct_ssh_host": "gpu-a.example",
+        "ssh_hostname": "gpu-a.example",
+        "ssh_user": "user",
+        "ssh_port": 22
+      }
+    },
+    {
+      "id": "lab-b",
+      "name": "实验服务器 B",
+      "enabled": true,
+      "connection": {
+        "ssh_alias": "lab-b",
+        "remote_root": "/home/user/gpu-over-ip/streaming",
+        "moonlight_exe": "C:\\gpu-over-ip\\moonlight\\Moonlight.exe",
+        "moonlight_workdir": "C:\\gpu-over-ip\\moonlight",
+        "moonlight_host": "gpu-b.example",
+        "moonlight_app": "Steam",
+        "portable": true,
+        "bitrate": 8000,
+        "display_mode": "windowed",
+        "sunshine_port": 47989,
+        "direct_ssh_fallback": false,
+        "direct_ssh_host": "gpu-b.example",
+        "ssh_hostname": "gpu-b.example",
+        "ssh_user": "example",
+        "ssh_port": 2222
+      }
+    }
+  ]
+}

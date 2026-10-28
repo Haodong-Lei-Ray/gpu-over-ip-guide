@@ -87,7 +87,7 @@ GPU-over-IP 不要求预先上传整个游戏，但会在运行中传输图形�
 
 ```powershell
 Set-Location -LiteralPath 'C:\gpu-over-ip\moonlight'
-.\Moonlight.exe stream --1080 --fps 60 --bitrate 8000 --video-codec H.264 --video-decoder hardware --no-hdr --display-mode windowed --no-performance-overlay --no-absolute-mouse gpu-server.example "Steam"
+.\Moonlight.exe stream --1080 --fps 60 --bitrate 8000 --video-codec H.264 --video-decoder hardware --no-hdr --no-quit-after --audio-on-host --audio-config stereo --display-mode windowed --no-performance-overlay --no-absolute-mouse gpu-server.example "Steam"
 ```
 
 首次配对由用户在本地 Sunshine 管理页面提交当前 PIN。Steam 在远端单独登录，游戏在远端启动。对于 Proton，先确认兼容工具及它要求的 Steam Linux Runtime 已实际安装注册，再测试离线；本地 Windows 启动过不能代替远端首次准备。
@@ -103,11 +103,57 @@ python scripts/open_remote_steam.py --config private/launcher.json --check-only
 pythonw scripts/open_remote_steam.py --config private/launcher.json
 ```
 
-本地 agent 可为第二条命令创建桌面“启动远程 Steam”快捷方式，工作目录设成本地项目目录。开机后让既有 VPN 就绪，双击一次即可：检查 SSH → 复用/补启动专用会话 → 等待 Steam/Sunshine 就绪 → 打开 Moonlight。它不执行 `-applaunch`，不自动启动任何游戏；用户在远端 Steam 库里选择游戏。首次 SSH、过期的 Steam 登录或系统权限提示仍由用户完成。
+本地 agent 只需为第二条命令创建一个桌面“远程 Steam 管理器”快捷方式，工作目录设成本地项目目录。开机后让既有 VPN 就绪，打开管理器：选择服务器 → 查看同一窗口中的服务与四卡状态 → 点击“连接 / 启动 Steam”。已运行就直接连接 Moonlight；未运行则按所选渲染 / 编码 GPU 启动。它不执行 `-applaunch`，不自动启动任何游戏；用户在远端 Steam 库里选择游戏。首次 SSH、过期的 Steam 登录或系统权限提示仍由用户完成。
+
+Steam 按 `/proc/<pid>/exe` 与 UID 检测，不按 `argv[0]` 或显示名称猜测；已有 Steam 但 Sunshine 缺失时，按现有显卡配置补启动串流，不重新选卡。
 
 `--check-only` 只读检查；`--prepare-only` 仅准备远端服务、不打开本地窗口。远端就绪入口须由 server agent 预先建立，公开脚本不是完整服务器安装器。
 
 如果普通 SSH 被现有 VPN 路径影响，可在自己的配置中启用 `direct_ssh_fallback` 并填写与 SSH HostName 一致的 `direct_ssh_host`。它只在普通 SSH 连接失败后，为 SSH socket 绑定恰好一块启用的物理网卡；不修改路由或 VPN。多网卡、策略或网络环境不满足时会报错，不猜测接口，也不替 Moonlight UDP 改道。
+
+### 多服务器配置与启动时选择
+
+将 `examples/servers.example.json` 复制为本机 **`private/servers.json`**，编辑 `servers` 数组。每项有唯一 `id`、人类可读 `name` 和完整 `connection`。连接字段与单服务器 JSON 相同，另外支持 `ssh_hostname`、`ssh_user`、`ssh_port`；SSH 仍使用已有密钥/agent，不在 JSON 中保存密码、私钥或令牌。`enabled: false` 可暂时隐藏某台服务器。
+
+- `ssh_alias` 可复用已有 OpenSSH Host 配置；显式填写的主机、用户和端口会作为本次连接参数覆盖它。Moonlight 的地址与 SSH 地址可以不同。
+- `default_server` 决定初始选中项。GUI 默认自动读取同一私有目录的 `servers.json`，在管理器顶部选择服务器并检查对应服务；仅选择服务器不启动或关闭工作负载。
+- `connection` 也可改为 `config_file: "other-launcher.json"`，路径相对 `servers.json` 所在目录，保留旧单服务器文件。
+- 每台服务器独立使用远端 GPU 选择文件；客户端锁按服务器 ID 隔离。切换主机前请断开并退出旧 Moonlight。启动器会核对所选主机和已有客户端的命令/PID 记录，无法确认时提示退出，避免复用错服务器。
+
+```powershell
+# 统一管理器：选择服务器、查看状态、连接、选卡、关闭
+pythonw scripts/open_remote_steam.py --servers private/servers.json
+# 兼容选卡入口：仍进入同一管理器
+pythonw scripts/open_remote_steam.py --servers private/servers.json --choose-gpu
+# 将指定服务器预选为当前目标（同一管理器仍可切换）
+pythonw scripts/open_remote_steam.py --servers private/servers.json --server lab-a
+# 只读检查指定主机
+python scripts/open_remote_steam.py --servers private/servers.json --server lab-a --check-only
+```
+
+### 分别选择游戏渲染与串流编码 GPU
+
+前提：远端已完成 server.md 的 D 节集成。四卡窗口显示实际枚举到的所有 GPU，不限定恰好四张；每 10 秒刷新显存、GPU/编码利用率、温度、功耗与进程。同一 PID 的 `python*` 别名跨卡一致，详情保留 PID、原始进程名与显存。
+
+渲染卡用于私有 Xorg/Steam 与游戏环境；编码卡通过 Sunshine 的 `CUDA_VISIBLE_DEVICES` 选择 NVENC，可以与渲染卡相同。跨卡仍有图像复制成本，不承诺更快。Steam 少量辅助进程与有自身选卡逻辑的应用须以真实 GPU 进程核验，不能只凭界面配置证明所有子进程都被硬隔离。
+
+选择变更会正常退出专用 Steam、重启自己的显示/串流，游戏仍在运行时拒绝切换；不会强制结束游戏、重置 GPU 或停止其他计算作业。CLI 可以先只读计划：
+
+```powershell
+python scripts/open_remote_steam.py --servers private/servers.json --server lab-a --plan-only --render-gpu 0 --stream-gpu 1
+```
+
+### 音频与安全退出
+
+本示例的串流使用远端专用 PulseAudio 空声卡。入口设置 `--audio-on-host --audio-config stereo --no-quit-after`，让 Sunshine 保持在显式指定的专用声卡上播放/捕获，避免游戏和捕获分到不同虚拟声卡；这里只是远端空声卡，并不要求服务器有扬声器。普通物理声卡环境应按自己的配置核验后调整。
+
+关闭也在管理器内完成：先选服务器，再点击“关闭所选服务器的会话”。旧关闭器命令会进入同一管理器并提示关闭操作，保留兼容：
+
+```powershell
+pythonw scripts/close_remote_steam.py --config private/launcher.json --servers private/servers.json
+```
+
+管理器会先重新检测目标服务器。已停止时直接提示，无需重复关闭；游戏还在运行时拒绝关闭，要求先保存退出。只断开 Moonlight 会保留游戏；关闭器则正常退出自己的 Steam、Sunshine、桌面和专用音频。自动恢复守护启用时会拒绝关闭以避免马上重启。
 
 ### 鼠标与监控
 

@@ -8,10 +8,11 @@ import threading
 
 
 def main():
-    if len(sys.argv) != 6:
-        raise ValueError("Usage: host port interface_index source_ipv4 allowed_host")
-    host, port, interface_index, source, allowed = sys.argv[1:]
-    if host != allowed or int(port) != 22:
+    if len(sys.argv) not in (6,7):
+        raise ValueError("Usage: host port interface_index source_ipv4 allowed_host [allowed_port]")
+    host, port, interface_index, source, allowed = sys.argv[1:6]
+    allowed_port=int(sys.argv[6]) if len(sys.argv)==7 else 22
+    if not 1<=allowed_port<=65535 or host != allowed or int(port) != allowed_port:
         raise ValueError("Connection is outside the configured SSH destination")
     socket.inet_aton(source)
     index = int(interface_index)

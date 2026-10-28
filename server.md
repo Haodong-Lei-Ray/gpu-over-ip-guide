@@ -229,6 +229,105 @@ systemctl --user disable gpuip-session-watch.service
 
 准备立即停止时，先保存退出游戏和专用 Steam，再执行 `systemctl --user stop gpuip-session-watch.service`。默认 systemd 会结束该服务创建的子进程，因此不要在游戏中把它当成纯粹隐藏巡检窗口的开关。Juice 同理先正常关闭自己的客户端应用，再停对应 unit。是否关闭 linger 应考虑该用户其他 user 服务，不默认全局关闭。
 
+## D. 对接独立渲染 / 编码选卡后端
+
+这是现有专用串流环境的集成层，不是通用驱动安装器。每台服务器分别部署，自己的 `remote_root` 不能指向公共仓库或其他人的会话。先让用户保存退出游戏、正常停止自己的专用 Steam/显示/串流，再初始化映射；不停止其他 GPU 计算作业。
+
+### D1. 目录和状态文件契约
+
+`gpu_control.py` 使用下面的约定；自己的部署不同时由 server agent 先适配代码和启动脚本，再交给 client。
+
+| 位置 | 约定 |
+| --- | --- |
+| `runtime/steam-client/ubuntu12_32/steam` | 本用户专用原生 Steam，按真实 executable 和 UID 检测 |
+| `scripts/start-session.sh` | 幂等准备显示、音频、Sunshine、Steam，不自动启动游戏 |
+| `scripts/run-steam.sh` | 接受 `-shutdown` 并请求正常退出；不能吞掉传入参数 |
+| `scripts/stop-owned.py sunshine 或 display` | 根据保存的 PID、UID、进程身份正常停止自己的组件 |
+| `config/display-state.json` | `pid`、`gpu_index`、`started`；私有显示为 `:93` |
+| `config/sunshine-process.json` | `pid`、`started`；只记录自己启动的进程 |
+| `config/Xauthority` | 专用显示授权；不公开其内容 |
+| `runtime/pulse/native` / `config/pulse-cookie` | 专用音频 socket 与 cookie |
+| `config/gpu-selection.json` | 此后端生成的真实 index、UUID、PCI、DRM 映射，只保留在服务器 |
+
+示例实现固定 `:93` 和 Sunshine 回环检查端口 `47989`；不同显示/端口时统一修改后端、客户端与启动脚本。不要用监听端口代替完整进程归属检查。`stop-owned.py` 须先验证 PID/UID/实际 executable，再停止已验证的进程或自己的进程组；保存的 PID 被复用时拒绝操作。
+
+在仓库目录部署源码（不包含游戏、账户、凭据）：
+
+```sh
+streamRoot=/home/user/gpu-over-ip/streaming
+install -d -m700 "$streamRoot/scripts/gpu-selector" "$streamRoot/config" "$streamRoot/logs"
+install -m700 scripts/gpu-selector/gpu_control.py scripts/gpu-selector/process_aliases.py scripts/gpu-selector/nvidia_smi_names.py scripts/gpu-selector/gpu-env.sh "$streamRoot/scripts/gpu-selector/"
+install -m700 scripts/gpu-selector/vulkan-devices.py "$streamRoot/scripts/vulkan-devices.py"
+# 已有自己的 start-session.sh 等入口，并确认专用会话已停止后：
+python3 "$streamRoot/scripts/gpu-selector/gpu_control.py" --root "$streamRoot" init --render 0 --stream 0
+```
+
+`init` 只写初始映射，不启动会话；已存在映射或专用组件仍在运行时拒绝初始化。示例索引必须先用 `nvidia-smi` 核对，不能照抄。JSON 里的 GPU UUID 不应提交。
+
+### D2. 四个入口必须读取同一份选择
+
+server agent 须把下面的数据连接到实际启动代码。只部署 `gpu_control.py` 而不修改启动入口，并不能真正切卡。
+
+**显示入口**：读取 `config/gpu-selection.json` 的 `render_index`、`render_pci`、`xorg_bus`。根据自己的有效 Xorg 模板生成专用配置，把 `BusID` 设为 `xorg_bus`，启动 Xorg 时 `-isolateDevice` 同样使用该值。显示状态文件保存实际 index。不要改共享系统 Xorg 配置，也不动态删除别人的显示锁。
+
+```python
+choice = json.loads((root / 'config/gpu-selection.json').read_text())
+# root 是自己的 streaming 目录；从已验证的私有模板生成配置。
+xorg_text = re.sub(r'BusID\s+"[^"]+"', 'BusID "' + choice['xorg_bus'] + '"', template)
+# 写入自己的 xorg-selected.conf，然后把以下参数放到自己的 Popen 参数数组：
+xorg_args = ['-config', str(root / 'config/xorg-selected.conf'),
+             '-isolateDevice', choice['xorg_bus']]
+```
+
+**Sunshine 入口**：保持 `DISPLAY=:93` 捕获所选渲染卡上的私有桌面，将 Sunshine 子进程的 `CUDA_VISIBLE_DEVICES` 设为 `stream_uuid`，使可见 CUDA 设备 0 对应所选 NVENC 卡。`capture=x11`、`encoder=nvenc` 是此示例路径；其他捕获后端不要照搬。若配置 `adapter_name`，同步为 `stream_drm`；NVENC 的关键是子进程的 CUDA 可见设备，而不是把 DRM 路径误当成所有编码器的统一选卡参数。
+
+```python
+choice = json.loads((root / 'config/gpu-selection.json').read_text())
+env = dict(os.environ, DISPLAY=':93', XAUTHORITY=str(root / 'config/Xauthority'),
+           CUDA_VISIBLE_DEVICES=choice['stream_uuid'])
+# 将 env 传给自己启动 Sunshine 的 subprocess.Popen，保留原有音频和 D-Bus 环境。
+```
+
+**Steam 入口与游戏 wrapper**：在原有环境之后、真正执行 Steam/Proton 命令之前 source 共享环境；原来的 `CUDA_VISIBLE_DEVICES` / `VKD3D_VULKAN_DEVICE` 固定值必须去掉或被这里覆盖。自己的 shell 入口要启用 `set -e`，映射失败时退出，不能静默回退到任意卡。
+
+```sh
+export GPUIP_STREAM_ROOT=/home/user/gpu-over-ip/streaming
+source "$GPUIP_STREAM_ROOT/scripts/gpu-selector/gpu-env.sh"
+# 然后 exec 原来的 Steam 或传入的 Proton 命令；保留现有存档 prefix 和参数。
+```
+
+环境 helper 通过 Vulkan device UUID 匹配枚举 ordinal，再设置 `VKD3D_VULKAN_DEVICE`，避免把 nvidia-smi 编号直接假定成 Vulkan 编号。CUDA 可见性不会自动限制所有图形 API；OpenGL 跟随 Xorg，VKD3D 使用对应的显式选择。DXVK、原生 Vulkan 或自行记忆适配器的游戏仍需按自己的运行时核验和适配，不能声明所有应用都已硬隔离。
+
+**幂等和进程识别**：已有 Steam 用 `/proc/<pid>/exe` 的真实路径及 UID 检测，不依赖 `argv[0]` 是否叫 steam；启动名变化不应重复打开客户端。Sunshine、Xorg 的 PID 归属检查也不能因显示别名而失效。切卡前先检查游戏，再正常退出自己的 Steam，再停止自己的 Sunshine/显示；如果游戏出现或 Steam 无法正常退出就停止后续操作。
+
+### D3. 先计划，再验收
+
+```sh
+python3 "$streamRoot/scripts/gpu-selector/gpu_control.py" --root "$streamRoot" status
+python3 "$streamRoot/scripts/gpu-selector/gpu_control.py" --root "$streamRoot" plan --render 0 --stream 1
+# 确认两张卡获准使用、专用游戏已退出、四个入口均已适配后：
+python3 "$streamRoot/scripts/gpu-selector/gpu_control.py" --root "$streamRoot" apply --render 0 --stream 1
+```
+
+`status` 会维护自己的显示别名缓存；不启动/停止工作负载。`plan` 不切卡；`apply` 仅在选择变更时正常停止并重建自己的会话，并在失败时尝试恢复旧会话。检测到游戏或已启用的专用恢复守护时拒绝切换。四卡进程表来自 NVIDIA 的实际数据；跨卡复制可能增加耗时，分卡不保证提升帧率。用真实 PID/GPU 活动核对渲染与编码位置，先验收同卡，再在获准且空闲的卡上验收分卡，不用共享繁忙作业做破坏性测试。
+
+### D4. 可选：让终端也显示 python* 别名
+
+默认 GPU 选择界面已使用共享 `process-aliases.json`。如果本人还希望直接运行 `nvidia-smi` 时显示相同别名，在自己的 shell 配置中加函数；先备份，遇到已有同名函数/alias 时先合并，不能覆盖别人或系统的工具。
+
+```sh
+nvidia-smi() {
+    python3 /home/user/gpu-over-ip/streaming/scripts/gpu-selector/nvidia_smi_names.py "$@"
+}
+# 当前终端重新加载自己的 shell 配置后：
+nvidia-smi
+nvidia-smi --real
+```
+
+包装会明确标注“显示别名”，仅替换默认表格的名称列，GPU、PID、显存和利用率不变；带参数的 query/管理命令交回原始 `/usr/bin/nvidia-smi`。原始程序随时可用 `nvidia-smi --real` 或绝对路径访问。它不修改实际 executable、驱动、进程名称或其他用户环境；不能把此显示包装当成服务器上的真实进程改名方案。
+
+若要 `watch -n 1 nvidia-smi` 也显示别名，可在本人 `~/.local/bin/nvidia-smi` 建一个调用同一 Python 包装的脚本，并只在本人 PATH 中优先使用；不替换 `/usr/bin/nvidia-smi`。其他用户、容器、sudo 或未加载配置的旧 shell 可能仍显示原名，这是预期行为。
+
 ## Agent 交接结果格式
 
 ```text
