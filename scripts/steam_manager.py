@@ -68,8 +68,8 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
     for key,title,width in columns:tree.heading(key,text=title);tree.column(key,width=width,minwidth=40,stretch=key=='process')
     tree.pack(fill='x')
     row=ttk.Frame(frame);row.pack(fill='x',pady=(15,5))
-    ttk.Label(row,text='Steam／游戏渲染 GPU').grid(row=0,column=0,sticky='w')
-    ttk.Label(row,text='Sunshine 编码 GPU').grid(row=0,column=1,sticky='w')
+    ttk.Label(row,text='待应用：Steam／游戏渲染 GPU').grid(row=0,column=0,sticky='w')
+    ttk.Label(row,text='待应用：Sunshine 编码 GPU').grid(row=0,column=1,sticky='w')
     render=tk.StringVar();stream=tk.StringVar()
     render_box=ttk.Combobox(row,textvariable=render,state='disabled',width=37);render_box.grid(row=1,column=0,padx=(0,35),pady=6)
     stream_box=ttk.Combobox(row,textvariable=stream,state='disabled',width=37);stream_box.grid(row=1,column=1,pady=6)
@@ -120,7 +120,8 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
     def fetch():
         if state['busy']:return
         profile=current();c=profile['config'];generation=state['generation'];state['busy']=True;controls()
-        connection.set(profile['name']+' · SSH '+c.get('ssh_hostname',c['ssh_alias'])+' · Moonlight '+c['moonlight_host'])
+        app.title('远程 Steam 管理器 · '+profile['name'])
+        connection.set('当前监控服务器：['+profile['id']+'] '+profile['name']+' · SSH '+c.get('ssh_hostname',c['ssh_alias'])+':'+str(c.get('ssh_port',22))+' · Moonlight '+c['moonlight_host'])
         def worker():
             try:events.put(('snapshot',generation,inspect_server(c)))
             except Exception as error:events.put(('error',generation,str(error)))
@@ -204,7 +205,10 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
                 elif kind=='done':message.set(value);fetch()
                 else:
                     message.set(value)
-                    if state['snapshot'] is None:health.set('连接失败，请核对配置或稍后刷新。')
+                    state['snapshot']=None
+                    for item in tree.get_children():tree.delete(item)
+                    details_changed()
+                    health.set('刷新失败 · 当前运行状态未知，旧监控数据已清除；请重试。')
                 controls()
         except queue.Empty:pass
         if not state['busy'] and time.monotonic()>=state['next']:fetch()
