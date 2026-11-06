@@ -260,6 +260,7 @@ streamRoot=/home/user/gpu-over-ip/streaming
 install -d -m700 "$streamRoot/scripts/gpu-selector" "$streamRoot/config" "$streamRoot/logs"
 install -m700 scripts/gpu-selector/gpu_control.py scripts/gpu-selector/process_aliases.py scripts/gpu-selector/nvidia_smi_names.py scripts/gpu-selector/gpu-env.sh "$streamRoot/scripts/gpu-selector/"
 install -m700 scripts/gpu-selector/steam_device_view.py "$streamRoot/scripts/gpu-selector/"
+install -m700 scripts/gpu-selector/process_details.py "$streamRoot/scripts/gpu-selector/"
 install -m700 scripts/session_shutdown.py "$streamRoot/scripts/session_shutdown.py"
 install -m700 scripts/gpu-selector/vulkan-devices.py "$streamRoot/scripts/vulkan-devices.py"
 # 已有自己的 start-session.sh 等入口，并确认专用会话已停止后：
@@ -331,7 +332,7 @@ python3 "$streamRoot/scripts/gpu-selector/gpu_control.py" --root "$streamRoot" a
 
 ### D4. 可选：让终端也显示 python* 别名
 
-默认 GPU 选择界面已使用共享 `process-aliases.json`。如果本人还希望直接运行 `nvidia-smi` 时显示相同别名，在自己的 shell 配置中加函数；先备份，遇到已有同名函数/alias 时先合并，不能覆盖别人或系统的工具。
+管理器当前显示 PID、用户、原始名称和显存占用，不再展示合成别名。下面仅保留可选终端包装和旧版本的兼容说明；不因更新管理器就自动改变本人终端设置。如果本人仍需要终端别名显示，可在自己的 shell 配置中加函数；先备份，遇到已有同名函数/alias 时先合并，不能覆盖别人或系统的工具。
 
 ```sh
 nvidia-smi() {

@@ -63,9 +63,9 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
     refresh_button=ttk.Button(bar,text='刷新状态');refresh_button.pack(side='right')
     connection=tk.StringVar();readonly_text(frame,textvariable=connection,max_lines=2).pack(fill='x',pady=(10,5))
     health=tk.StringVar(value='正在读取所选服务器状态…');readonly_text(frame,textvariable=health,font=('Microsoft YaHei UI',11,'bold'),max_lines=2).pack(fill='x',pady=(0,12))
-    columns=[('id','GPU',60),('memory','显存 已用 / 总量',155),('util','GPU',60),('enc','编码',60),('temp','温度',60),('power','功耗',75),('process','运行进程',330),('role','当前配置',130)]
+    columns=[('id','GPU',60),('memory','显存 已用 / 总量',190),('util','GPU 利用率',100),('enc','编码利用率',100),('temp','温度',80),('power','功耗',100),('role','当前配置',170)]
     tree=ttk.Treeview(frame,columns=[v[0] for v in columns],show='headings',height=4,selectmode='browse')
-    for key,title,width in columns:tree.heading(key,text=title);tree.column(key,width=width,minwidth=40,stretch=key=='process')
+    for key,title,width in columns:tree.heading(key,text=title);tree.column(key,width=width,minwidth=40,stretch=key in ('memory','role'))
     tree.pack(fill='x')
     row=ttk.Frame(frame);row.pack(fill='x',pady=(15,5))
     ttk.Label(row,text='待应用：Steam／游戏渲染 GPU').grid(row=0,column=0,sticky='w')
@@ -75,8 +75,10 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
     stream_box=ttk.Combobox(row,textvariable=stream,state='disabled',width=37);stream_box.grid(row=1,column=1,pady=6)
     note=tk.StringVar(value='显卡状态每 10 秒刷新；变更显卡前请先保存退出游戏。')
     readonly_text(frame,textvariable=note,max_lines=2).pack(fill='x',pady=(0,10))
-    ttk.Label(frame,text='进程详情（名称用 python* 别名显示，原始名称在这里核对）').pack(anchor='w')
-    details=tk.Text(frame,height=5,font=('Microsoft YaHei UI',9),wrap='word',relief='flat');details.pack(fill='both',expand=True,pady=(5,12));details.configure(state='disabled')
+    ttk.Label(frame,text='进程详情（点击显卡查看 PID、用户、原始名称和显存占用）').pack(anchor='w')
+    detail_frame=ttk.Frame(frame);detail_frame.pack(fill='both',expand=True,pady=(5,12))
+    details=tk.Text(detail_frame,height=5,font=('Microsoft YaHei UI',9),wrap='word',relief='flat');details.pack(side='left',fill='both',expand=True);details.configure(state='disabled')
+    detail_scroll=ttk.Scrollbar(detail_frame,orient='vertical',command=details.yview);detail_scroll.pack(side='right',fill='y');details.configure(yscrollcommand=detail_scroll.set)
     actions=ttk.Frame(frame);actions.pack(fill='x')
     connect_button=ttk.Button(actions,text='连接 / 启动 Steam');connect_button.pack(side='left')
     apply_button=ttk.Button(actions,text='应用所选 GPU 并连接');apply_button.pack(side='left',padx=10)
@@ -113,7 +115,7 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
         if snapshot and snapshot['gpu'] and choice:
             gpu=next(g for g in snapshot['gpu']['gpus'] if str(g['index'])==choice[0])
             lines=[f"GPU {gpu['index']} · {gpu['name']} · PCI {gpu['pci']}"]
-            for p in gpu['processes']:lines.append(f"{p['alias']} · PID {p['pid']} · {p.get('memory') or 'N/A'}\n  原始名称：{p['name']}")
+            for p in gpu['processes']:lines.append(f"PID：{p['pid']}    用户：{p.get('user') or '未知'}    显存占用：{p.get('memory') or 'N/A'}\n原始名称：{p['name']}")
             if not gpu['processes']:lines.append('没有发现 GPU 进程。')
         details.configure(state='normal');details.delete('1.0','end');details.insert('1.0','\n'.join(lines));details.configure(state='disabled')
     tree.bind('<<TreeviewSelect>>',details_changed)
@@ -146,7 +148,7 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
             def metric(v,suffix):return 'N/A' if v is None else f'{v:g}{suffix}'
             memory=f'{used/1024:.1f} / {total/1024:.1f} GB' if used is not None and total else 'N/A'
             labels[f'GPU {i}']=f'GPU {i} · {memory} · '+metric(g['utilization'],'%')
-            values=(f'GPU {i}',memory,metric(g['utilization'],'%'),metric(g['encoder'],'%'),metric(g['temperature'],'°C'),metric(g['power'],' W'),', '.join(p['alias'] for p in g['processes']) or '空闲',' + '.join(roles) or '—')
+            values=(f'GPU {i}',memory,metric(g['utilization'],'%'),metric(g['encoder'],'%'),metric(g['temperature'],'°C'),metric(g['power'],' W'),' + '.join(roles) or '—')
             if tree.exists(str(i)):tree.item(str(i),values=values)
             else:tree.insert('','end',iid=str(i),values=values)
         for box,var,old,role,key in [(render_box,render,old_render,'render_index','default_render_gpu'),(stream_box,stream,old_stream,'stream_index','default_stream_gpu')]:

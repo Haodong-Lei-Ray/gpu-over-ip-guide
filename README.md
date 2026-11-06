@@ -14,7 +14,7 @@
 
 两端 agent 先各自阅读对应文件，再交换脱敏的就绪状态。HTML 不会替你执行命令，也不会上传填写的连接参数。
 
-日常使用：打开一个“远程 Steam 管理器”，在同一窗口从私有 `servers.json` 选择服务器，查看状态、连接/启动、切卡与关闭；点击连接时，远端 Steam 已运行就直接复用，尚未运行才按所选显卡启动。渲染与串流编码可以分别选卡；四卡状态和进程别名在同一窗口查看。全屏按 **Ctrl + Alt + Shift + X**。远端是否就绪、按需恢复以及可选开机驻留/自动巡检，见 [server.md 的 C 节](server.md#c-怎样确认远端持续运行)。默认不会替用户开启驻留服务。
+日常使用：打开一个“远程 Steam 管理器”，在同一窗口从私有 `servers.json` 选择服务器，查看状态、连接/启动、切卡与关闭；点击连接时，远端 Steam 已运行就直接复用，尚未运行才按所选显卡启动。渲染与串流编码可以分别选卡；显卡状态及 PID、用户、原始名称和显存占用在同一窗口查看。全屏按 **Ctrl + Alt + Shift + X**。远端是否就绪、按需恢复以及可选开机驻留/自动巡检，见 [server.md 的 C 节](server.md#c-怎样确认远端持续运行)。默认不会替用户开启驻留服务。
 
 ## 本次同步的入口与脚本
 
@@ -26,7 +26,8 @@
 - `scripts/gpu_picker.py` + `scripts/gpu-selector/`：分别选择 Steam/游戏渲染 GPU 和 Sunshine NVENC GPU，显示显存、GPU/编码利用率、温度、功耗、PID；游戏运行时拒绝切卡。
 - `scripts/gpu-selector/steam_device_view.py`：通过 Bubblewrap 私有设备视图，让 Steam 和全部 `steamwebhelper` 跟随渲染卡；编码卡继续由独立 Sunshine 进程选择，集成方法见 server.md。
 - `scripts/close_remote_steam.py`：选择目标服务器后正常关闭专用会话；不关闭服务器或强制结束游戏。
-- `process_aliases.py` / `nvidia_smi_names.py`：界面与可选终端包装使用一致的 `python1`、`python2` 显示别名；真实名称仍可查看，不修改程序、驱动或其他用户的进程。
+- `process_details.py`：采集进程所属用户与原始可执行名称；管理器在显卡表格下方显示 PID、用户、原始名称和该卡上的显存占用，不展示合成别名。
+- `process_aliases.py` / `nvidia_smi_names.py`：保留旧版本与可选终端显示包装的兼容支持。
 
 服务器选卡后端依赖 `server.md` 的目录、状态文件和启动脚本契约；**先完成两端 agent 的集成，再启用选卡**。本仓库不上传原机安装器、生产配置、账号、二进制或进程改名注入组件。使用四张卡的数量与索引由服务器枚举，不把 GPU 型号相同当成设备相同。
 

@@ -51,6 +51,7 @@ class ManagerUiTests(unittest.TestCase):
         gpus=[dict(index=i,name='Test GPU',pci='01:00.0',used=5,total=24000,
                    utilization=0,encoder=0,temperature=30,power=20,processes=[])
               for i in range(4)]
+        gpus[1]['processes']=[{'pid':77,'user':'researcher','name':'/home/user/env/bin/python','memory':'3260 MiB','alias':'python455'}]
         snapshot={'ready':ready,'gpu_error':None,'gpu':{
             'gpus':gpus,'selection':{'render_index':3,'stream_index':3},'game_pids':[]}}
         failures=[];exports=[]
@@ -66,11 +67,16 @@ class ManagerUiTests(unittest.TestCase):
                     tree=next(w for w in widgets if w.winfo_class()=='Treeview')
                     combos=[w for w in widgets if w.winfo_class()=='TCombobox']
                     self.assertEqual(tree.selection(),('1',))
+                    self.assertNotIn('process',tree['columns'])
+                    self.assertEqual(len(tree['columns']),7)
                     self.assertTrue(all(w.get().startswith('GPU 1 · ') for w in combos[1:]))
                     buttons={str(w['text']):w for w in widgets if w.winfo_class()=='TButton'}
                     buttons['复制全部信息'].invoke()
                     self.assertIn('Steam：运行中',exports[-1])
                     self.assertIn('GPU 3',exports[-1])
+                    for value in ('PID：77','用户：researcher','原始名称：/home/user/env/bin/python','显存占用：3260 MiB'):
+                        self.assertIn(value,exports[-1])
+                    self.assertNotIn('python455',exports[-1])
                     for button in buttons.values():
                         self.assertGreater(button.winfo_height(),1)
                         self.assertLessEqual(button.winfo_rooty()+button.winfo_height(),app.winfo_rooty()+app.winfo_height())

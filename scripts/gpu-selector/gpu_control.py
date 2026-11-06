@@ -15,6 +15,7 @@ import subprocess
 import time
 import xml.etree.ElementTree as ET
 from process_aliases import aliases_for
+from process_details import process_details
 import sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from session_shutdown import stop_steam
@@ -99,6 +100,7 @@ def inventory():
     xml = ET.fromstring(run(['nvidia-smi', '-q', '-x'], check=True).stdout)
     by_uuid = {g['uuid']: g for g in gpus}
     all_processes = {}
+    metadata = {}
     for gpu in xml.findall('gpu'):
         target = by_uuid.get(gpu.findtext('uuid'))
         if target is None: continue
@@ -106,6 +108,8 @@ def inventory():
             pid = int(item.findtext('pid'))
             name = item.findtext('process_name') or 'unknown'
             proc = dict(pid=pid, name=name, type=item.findtext('type'), memory=item.findtext('used_memory'))
+            if pid not in metadata:metadata[pid]=process_details(pid,name)
+            proc.update(metadata[pid])
             target['processes'].append(proc)
             all_processes[pid] = name
     # Stable for each PID for the lifetime of the process, across all four cards.

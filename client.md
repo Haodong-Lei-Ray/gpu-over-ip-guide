@@ -141,7 +141,7 @@ python scripts/open_remote_steam.py --servers private/servers.json --server lab-
 
 ### 分别选择游戏渲染与串流编码 GPU
 
-前提：远端已完成 server.md 的 D 节集成。四卡窗口显示实际枚举到的所有 GPU，不限定恰好四张；每 10 秒刷新显存、GPU/编码利用率、温度、功耗与进程。同一 PID 的 `python*` 别名跨卡一致，详情保留 PID、原始进程名与显存。
+前提：远端已完成 server.md 的 D 节集成。显卡表格显示实际枚举到的所有 GPU，不限定恰好四张；每 10 秒刷新显存、GPU/编码利用率、温度和功耗。点击显卡后，下方进程详情显示 **PID、用户、原始名称、该卡上的显存占用**，可以选中复制；上方不再放置运行进程名称列，也不显示合成的 `python*` 别名。原始可执行路径优先读取 `/proc/PID/exe`，权限不足或进程已退出时保留 NVIDIA 提供的名称；用户名不能解析时显示 UID 或“未知”。
 
 每台服务器可在 `connection` 中设置 `"default_render_gpu": 1`、`"default_stream_gpu": 1`，让两个选择框和详情初始定位到 GPU 1。未设置时沿用远端当前配置；设置的卡不存在时回退到远端配置。默认值只预选，不会重启已有会话或覆盖你在窗口里重新选择的卡。
 
