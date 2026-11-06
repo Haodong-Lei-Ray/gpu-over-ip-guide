@@ -139,6 +139,26 @@ python scripts/open_remote_steam.py --servers private/servers.json --server lab-
 
 同时显示两台服务器的游戏画面尚未实现。该功能需要每台服务器独立的 Moonlight 实例、配置身份、运行记录和隧道端口，并分别验证音频与输入焦点；当前不要通过重复点击同一个快捷方式来尝试。
 
+### 可选：通过 SSH 转发串流 UDP
+
+仅在已部署对应远端 UDP 桥接服务的服务器上启用。在该服务器的私有 `connection` 中补充下面的字段，其他 SSH、Steam 应用名称及路径字段仍须保留。两端的 Sunshine 基础端口、桥接端口和 32 字节令牌必须匹配；令牌文件只在两端私有目录保存。
+
+```json
+{
+  "moonlight_host": "127.0.0.1:48989",
+  "sunshine_port": 48989,
+  "stream_tunnel": {
+    "base_port": 48989,
+    "bridge_port": 49150,
+    "token_file": "C:\\gpu-over-ip\\private\\udp-lab.token"
+  }
+}
+```
+
+`stream_transport.py` 维护该服务器的专用 SSH 转发和本地 UDP 桥。每次新建 Moonlight 进程时请求新的通道代次，清理旧的 UDP 通道映射；确认本次令牌认证成功、四个本地 UDP 端口均绑定后才打开 Moonlight。已有正确主机的 Moonlight 会话直接复用，不因查看状态而重置。只检测到 TCP 监听端口不算就绪，这可避免切卡或重建 Sunshine 后出现 `Initial Ping Timeout` / 会话终止 -1。
+
+该通道使用配置的 SSH 地址、用户和端口，保持现有网络环境；服务器须已监听回环桥接端口。它不是通用 UDP 代理，只允许本机 Sunshine 的四个 UDP 端口。TCP 承载 UDP 的延迟和丢包恢复表现仍需实测。诊断日志、通道代次和进程记录位于 client 私有目录。更新老版本时先正常停止该专用通道进程树并重新启动，不能同时保留占用相同端口的旧实例。
+
 ### 分别选择游戏渲染与串流编码 GPU
 
 前提：远端已完成 server.md 的 D 节集成。显卡表格显示实际枚举到的所有 GPU，不限定恰好四张；每 10 秒刷新显存、GPU/编码利用率、温度和功耗。点击显卡后，下方进程详情显示 **PID、用户、原始名称、该卡上的显存占用**，可以选中复制；上方不再放置运行进程名称列，也不显示合成的 `python*` 别名。原始可执行路径优先读取 `/proc/PID/exe`，权限不足或进程已退出时保留 NVIDIA 提供的名称；用户名不能解析时显示 UID 或“未知”。

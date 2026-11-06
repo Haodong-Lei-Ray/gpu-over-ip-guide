@@ -55,7 +55,7 @@ def main():
                 address = ipaddress.ip_address(token)
             except ValueError:
                 continue
-            if str(address) in {"127.0.0.1", "0.0.0.0"} or any(address in network for network in EXAMPLE_NETWORKS):
+            if address.is_loopback or str(address)=="0.0.0.0" or any(address in network for network in EXAMPLE_NETWORKS):
                 continue
             failures.append((str(relative), "non-example-ipv4"))
     markdown = {p.relative_to(ROOT).as_posix() for p in files if p.suffix == ".md"}

@@ -26,6 +26,7 @@
 - `scripts/gpu_picker.py` + `scripts/gpu-selector/`：分别选择 Steam/游戏渲染 GPU 和 Sunshine NVENC GPU，显示显存、GPU/编码利用率、温度、功耗、PID；游戏运行时拒绝切卡。
 - `scripts/gpu-selector/steam_device_view.py`：通过 Bubblewrap 私有设备视图，让 Steam 和全部 `steamwebhelper` 跟随渲染卡；编码卡继续由独立 Sunshine 进程选择，集成方法见 server.md。
 - `scripts/close_remote_steam.py`：选择目标服务器后正常关闭专用会话；不关闭服务器或强制结束游戏。
+- `scripts/stream_transport.py` / `ssh_udp_bridge.py`：可选 SSH 串流通道；新会话重建 UDP 映射，认证和端口绑定成功后再启动 Moonlight，配置见 client.md。
 - `process_details.py`：采集进程所属用户与原始可执行名称；管理器在显卡表格下方显示 PID、用户、原始名称和该卡上的显存占用，不展示合成别名。
 - `process_aliases.py` / `nvidia_smi_names.py`：保留旧版本与可选终端显示包装的兼容支持。
 

@@ -13,6 +13,7 @@ import server_profiles
 import steam_manager
 import close_remote_steam
 import gpu_picker
+import stream_transport
 
 
 class ManagerTests(unittest.TestCase):
@@ -65,6 +66,20 @@ class ManagerTests(unittest.TestCase):
         with patch.object(steam_manager,'prepare_remote',return_value=self.ready) as prepare,patch.object(steam_manager,'request') as apply,patch.object(steam_manager,'connect_client',return_value='connected'):
             self.assertEqual(steam_manager.connect_server(self.config,0,1),'connected')
             prepare.assert_called_once();self.assertTrue(prepare.call_args.kwargs['check_only']);apply.assert_not_called()
+
+    def test_fresh_moonlight_waits_for_a_fresh_udp_transport(self):
+        c=dict(self.config,stream_tunnel={'base_port':48989})
+        with patch.object(launcher,'moonlight_processes',return_value=[]),patch.object(stream_transport,'ensure_transport') as ensure,patch.object(launcher.subprocess,'Popen') as spawn:
+            spawn.return_value.pid=55
+            launcher.connect_client(c,lambda _:None)
+            ensure.assert_called_once_with(c,new_session=True)
+
+    def test_existing_moonlight_is_not_disconnected_by_transport_reset(self):
+        c=dict(self.config,stream_tunnel={'base_port':48989})
+        process={'Id':77,'CommandLine':'Moonlight.exe stream gpu-a.example Steam'}
+        with patch.object(launcher,'moonlight_processes',return_value=[process]),patch.object(stream_transport,'ensure_transport') as ensure,patch.object(launcher.subprocess,'Popen') as spawn:
+            launcher.connect_client(c,lambda _:None)
+            ensure.assert_not_called();spawn.assert_not_called()
 
     def test_stopped_steam_passes_both_gpu_roles(self):
         with patch.object(steam_manager,'prepare_remote',return_value=dict(self.ready,steam_ready=False)),patch.object(steam_manager,'request',return_value={'changed':True}) as apply,patch.object(steam_manager,'reconnect_client',return_value='connected'):

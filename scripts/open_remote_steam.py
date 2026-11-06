@@ -95,6 +95,16 @@ def validate_config(config):
     for name in ('default_render_gpu','default_stream_gpu'):
         if name in config and (isinstance(config[name],bool) or not isinstance(config[name],int) or config[name]<0):
             raise ValueError(name+' must be a nonnegative integer')
+    if 'stream_tunnel' in config:
+        tunnel=config['stream_tunnel']
+        if not isinstance(tunnel,dict):raise ValueError('stream_tunnel must be an object')
+        for key,low,high in [('base_port',6,65514),('bridge_port',1,65535)]:
+            value=tunnel.get(key)
+            if isinstance(value,bool) or not isinstance(value,int) or not low<=value<=high:raise ValueError('Invalid stream_tunnel.'+key)
+        base=tunnel['base_port']
+        if tunnel['bridge_port'] in [base-5,base,base+1,base+9,base+10,base+11,base+21]:raise ValueError('Tunnel bridge port overlaps a streaming port')
+        token=tunnel.get('token_file')
+        if not isinstance(token,str) or not token or any(c in token for c in '\r\n\0'):raise ValueError('Invalid stream_tunnel.token_file')
     if config.get("display_mode", "windowed") not in {"windowed", "fullscreen", "borderless"}:
         raise ValueError("display_mode must be windowed, fullscreen, or borderless")
     return config
@@ -170,6 +180,10 @@ def moonlight_running(executable):
 
 def connect_client(config, status):
     running=moonlight_processes(config['moonlight_exe'])
+    if config.get('stream_tunnel') and not running:
+        status('正在重建所选服务器的 SSH / UDP 串流通道…')
+        from stream_transport import ensure_transport
+        ensure_transport(config,new_session=True)
     state_dir=Path(config.get('_client_state_dir',str(Path(__file__).resolve().parents[1]/'private')))
     record=state_dir/'active-moonlight.json'
     if running:
