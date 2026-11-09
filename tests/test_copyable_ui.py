@@ -40,18 +40,19 @@ class CopyableTests(unittest.TestCase):
 
 
 class ManagerUiTests(unittest.TestCase):
-    def test_gpu_one_defaults_copy_and_layout(self):
+    def test_manual_gpu_selection_copy_and_layout(self):
         original=tk.Tk
         try:probe=original();probe.update_idletasks();probe.destroy()
         except tk.TclError as error:self.skipTest(str(error))
         config={'ssh_alias':'lab-a','moonlight_host':'gpu-a.example',
                 'default_render_gpu':1,'default_stream_gpu':1}
-        profiles=[{'id':'lab-a','name':'实验服务器','config':config}]
-        ready={'steam_ready':True,'sunshine_ready':True,'display_ready':True}
+        profiles=[{'id':'lab-a','name':'实验服务器','config':config},
+                  {'id':'lab-b','name':'第二台服务器','config':dict(config,ssh_alias='lab-b')}]
+        ready={'steam_ready':False,'sunshine_ready':False,'display_ready':False}
         gpus=[dict(index=i,name='Test GPU',pci='01:00.0',used=5,total=24000,
                    utilization=0,encoder=0,temperature=30,power=20,processes=[])
               for i in range(4)]
-        gpus[1]['processes']=[{'pid':77,'user':'researcher','name':'/home/user/env/bin/python','memory':'3260 MiB','alias':'python455'}]
+        gpus[3]['processes']=[{'pid':77,'user':'researcher','name':'/home/user/env/bin/python','memory':'3260 MiB','alias':'python455'}]
         snapshot={'ready':ready,'gpu_error':None,'gpu':{
             'gpus':gpus,'selection':{'render_index':3,'stream_index':3},'game_pids':[]}}
         failures=[];exports=[]
@@ -66,13 +67,15 @@ class ManagerUiTests(unittest.TestCase):
                     walk(app);app.update_idletasks()
                     tree=next(w for w in widgets if w.winfo_class()=='Treeview')
                     combos=[w for w in widgets if w.winfo_class()=='TCombobox']
-                    self.assertEqual(tree.selection(),('1',))
+                    self.assertEqual(tree.selection(),('3',))
                     self.assertNotIn('process',tree['columns'])
                     self.assertEqual(len(tree['columns']),7)
-                    self.assertTrue(all(w.get().startswith('GPU 1 · ') for w in combos[1:]))
+                    self.assertEqual([w.get() for w in combos[1:]],['',''])
                     buttons={str(w['text']):w for w in widgets if w.winfo_class()=='TButton'}
+                    connect=buttons['连接 / 启动 Steam'];apply=buttons['应用所选 GPU 并连接']
+                    self.assertEqual(str(connect['state']),'disabled');self.assertEqual(str(apply['state']),'disabled')
                     buttons['复制全部信息'].invoke()
-                    self.assertIn('Steam：运行中',exports[-1])
+                    self.assertIn('Steam：未启动',exports[-1])
                     self.assertIn('GPU 3',exports[-1])
                     for value in ('PID：77','用户：researcher','原始名称：/home/user/env/bin/python','显存占用：3260 MiB'):
                         self.assertIn(value,exports[-1])
@@ -80,17 +83,22 @@ class ManagerUiTests(unittest.TestCase):
                     for button in buttons.values():
                         self.assertGreater(button.winfo_height(),1)
                         self.assertLessEqual(button.winfo_rooty()+button.winfo_height(),app.winfo_rooty()+app.winfo_height())
-                    # A refresh must not replace a deliberate selection with the default.
-                    combos[1].current(2);buttons['刷新状态'].invoke()
-                    app.after(400,verify_refresh)
+                    combos[1].current(2);combos[1].event_generate('<<ComboboxSelected>>')
+                    self.assertEqual(str(connect['state']),'disabled');self.assertEqual(str(apply['state']),'disabled')
+                    combos[2].current(1);combos[2].event_generate('<<ComboboxSelected>>')
+                    self.assertEqual(str(connect['state']),'normal');self.assertEqual(str(apply['state']),'normal')
+                    buttons['刷新状态'].invoke()
+                    app.after(400,lambda:verify_refresh(combos))
                 except Exception as error:failures.append(error);app.destroy()
-            def verify_refresh():
+            def verify_refresh(combos):
                 try:
-                    widgets=[]
-                    def walk(widget):
-                        if widget.winfo_class()=='TCombobox':widgets.append(widget)
-                        for child in widget.winfo_children():walk(child)
-                    walk(app);self.assertTrue(widgets[1].get().startswith('GPU 2 · '))
+                    self.assertTrue(combos[1].get().startswith('GPU 2 · '))
+                    self.assertTrue(combos[2].get().startswith('GPU 1 · '))
+                    combos[0].current(1);combos[0].event_generate('<<ComboboxSelected>>')
+                    app.after(400,lambda:verify_switch(combos))
+                except Exception as error:failures.append(error);app.destroy()
+            def verify_switch(combos):
+                try:self.assertEqual([w.get() for w in combos[1:]],['',''])
                 except Exception as error:failures.append(error)
                 finally:app.destroy()
             app.after(700,verify);return app

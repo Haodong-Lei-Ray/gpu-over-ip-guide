@@ -115,7 +115,7 @@ def show_picker(config, config_path, lock=None):
 
     def enable():
         ready=state['snapshot'] is not None and not state['applying']
-        launch.configure(state='normal' if ready else 'disabled')
+        launch.configure(state='normal' if ready and render.get() and stream.get() else 'disabled')
         render_box.configure(state='readonly' if ready else 'disabled')
         stream_box.configure(state='readonly' if ready else 'disabled')
         refresh.configure(state='disabled' if state['busy'] else 'normal')
@@ -129,7 +129,6 @@ def show_picker(config, config_path, lock=None):
         threading.Thread(target=worker,daemon=True).start()
 
     def draw(data):
-        initial=state['snapshot'] is None
         state['snapshot']=data
         choice=data['selection'];choices={}
         for gpu in data['gpus']:
@@ -147,11 +146,11 @@ def show_picker(config, config_path, lock=None):
             if tree.exists(str(i)):tree.item(str(i),values=values)
             else:tree.insert('', 'end',iid=str(i),values=values)
         # Keep the user's selections while refreshing the dynamic load labels.
-        def old_index(var, fallback):
+        def old_index(var):
             try:return int(var.get().split(' · ',1)[0].split()[-1])
-            except (ValueError,IndexError):return fallback
-        ri=choice['render_index'] if initial else old_index(render,choice['render_index'])
-        si=choice['stream_index'] if initial else old_index(stream,choice['stream_index'])
+            except (ValueError,IndexError):return None
+        ri=old_index(render)
+        si=old_index(stream)
         state['choices']=choices
         render_box.configure(values=list(choices.values()));stream_box.configure(values=list(choices.values()))
         render.set(choices.get(ri,''));stream.set(choices.get(si,''))
@@ -163,7 +162,7 @@ def show_picker(config, config_path, lock=None):
         details()
 
     def start():
-        if state['busy'] or not state['snapshot']:return
+        if state['busy'] or not state['snapshot'] or not render.get() or not stream.get():return
         ri=int(render.get().split(' · ',1)[0].split()[-1]);si=int(stream.get().split(' · ',1)[0].split()[-1])
         old=state['snapshot']['selection'];changed=ri!=old['render_index'] or si!=old['stream_index']
         if changed and state['snapshot']['game_pids']:
@@ -197,5 +196,7 @@ def show_picker(config, config_path, lock=None):
             status_var.set('正在切换会话，请等待操作结束后再关闭窗口。');return
         app.destroy()
     refresh.configure(command=fetch);launch.configure(command=start)
+    for box in (render_box,stream_box):
+        box.bind('<<ComboboxSelected>>',lambda _event:enable())
     app.protocol('WM_DELETE_WINDOW',close)
     fetch();app.after(150,poll);app.mainloop()

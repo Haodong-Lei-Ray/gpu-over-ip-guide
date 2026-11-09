@@ -21,15 +21,17 @@ def inspect_server(config):
         return {'ready':ready,'gpu':None,'gpu_error':str(error)}
 
 
+def session_ready(status):
+    return status['steam_ready'] and status['sunshine_ready'] and status.get('display_ready',True)
+
+
 def connect_server(config,render=None,stream=None,apply_gpus=False):
     if config.get('backend','sunshine')!='sunshine':raise RuntimeError('此服务器的串流后端尚未接入管理器，不能执行 Sunshine 启动脚本。')
     current=prepare_remote(config,lambda _:None,check_only=True)
-    if current['steam_ready'] and not apply_gpus:
-        if not current['sunshine_ready'] or not current.get('display_ready',True):
-            prepare_remote(config,lambda _:None,check_only=False)
+    if session_ready(current) and not apply_gpus:
         return connect_client(config,lambda _:None)
     if render is None or stream is None:
-        raise RuntimeError('请先部署选卡后端并选择渲染与编码 GPU。')
+        raise RuntimeError('请先手动选择渲染 GPU 和编码 GPU，再启动、恢复或切换会话。')
     outcome=request(config,'apply',render,stream)
     return reconnect_client(config,outcome['changed'])
 
@@ -105,9 +107,11 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
         server_box.configure(state='disabled' if state['operation'] else 'readonly')
         for button in [reload_button,refresh_button]:button.configure(state='normal' if idle else 'disabled')
         supported=snapshot and not snapshot.get('unsupported')
-        connect_button.configure(state='normal' if idle and supported else 'disabled')
+        selected_pair=gpu and render.get() and stream.get()
+        can_connect=supported and (session_ready(snapshot['ready']) or selected_pair)
+        connect_button.configure(state='normal' if idle and can_connect else 'disabled')
         close_button.configure(state='normal' if idle and supported else 'disabled')
-        apply_button.configure(state='normal' if idle and gpu else 'disabled')
+        apply_button.configure(state='normal' if idle and selected_pair else 'disabled')
         for box in [render_box,stream_box]:box.configure(state='readonly' if idle and gpu else 'disabled')
     def details_changed(_event=None):
         snapshot=state['snapshot'];choice=tree.selection()
@@ -151,13 +155,17 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
             values=(f'GPU {i}',memory,metric(g['utilization'],'%'),metric(g['encoder'],'%'),metric(g['temperature'],'°C'),metric(g['power'],' W'),' + '.join(roles) or '—')
             if tree.exists(str(i)):tree.item(str(i),values=values)
             else:tree.insert('','end',iid=str(i),values=values)
-        for box,var,old,role,key in [(render_box,render,old_render,'render_index','default_render_gpu'),(stream_box,stream,old_stream,'stream_index','default_stream_gpu')]:
-            preferred=current()['config'].get(key,selection[role])
-            fallback=labels.get('GPU '+str(preferred),labels.get('GPU '+str(selection[role]),''))
-            box.configure(values=list(labels.values()));var.set(labels.get(old,fallback))
-        note.set('检测到游戏运行：可连接，切卡或关闭前请先保存退出游戏。' if gpu['game_pids'] else '已有 Steam 点击连接即可复用。只有“应用所选 GPU”会主动切卡；关闭前会再次检测状态。')
+        for box,var,old in [(render_box,render,old_render),(stream_box,stream,old_stream)]:
+            box.configure(values=list(labels.values()))
+            var.set(labels.get(old,''))
+        if gpu['game_pids']:
+            note.set('检测到游戏运行，切卡或关闭前请先保存退出游戏。')
+        elif session_ready(r):
+            note.set('会话已就绪，可以直接连接。切卡前请手动选择渲染和编码 GPU。')
+        else:
+            note.set('请手动选择渲染 GPU 和编码 GPU，然后启动或恢复会话。')
         if not tree.selection() and gpu['gpus']:
-            preferred=str(current()['config'].get('default_render_gpu',selection['render_index']))
+            preferred=str(selection['render_index'])
             target=preferred if tree.exists(preferred) else str(gpu['gpus'][0]['index'])
             tree.selection_set(target);tree.focus(target);tree.see(target)
         details_changed()
@@ -219,6 +227,8 @@ def show_manager(profiles,default,config_path,startup_action='connect'):
         if state['operation']:message.set('远端操作尚未完成，请等待结果后再关闭管理器。');return
         app.destroy()
     server_box.bind('<<ComboboxSelected>>',switch)
+    for box in (render_box,stream_box):
+        box.bind('<<ComboboxSelected>>',lambda _event:controls())
     refresh_button.configure(command=fetch);reload_button.configure(command=reload_profiles)
     connect_button.configure(command=lambda:operate('connect'));apply_button.configure(command=lambda:operate('apply'));close_button.configure(command=lambda:operate('close'))
     if startup_action=='stop':message.set('此入口用于关闭：先选择服务器，核对状态，再点击右侧关闭按钮。')

@@ -49,12 +49,6 @@ class ManagerTests(unittest.TestCase):
         for changes in [{'ssh_port':True},{'ssh_port':70000},{'ssh_hostname':'gpu.example;command'}]:
             with self.assertRaises(ValueError):launcher.validate_config(dict(self.config,**changes))
 
-    def test_default_gpu_indices_validated(self):
-        for key in ('default_render_gpu','default_stream_gpu'):
-            for value in (True,-1,'1',1.5):
-                with self.assertRaises(ValueError):launcher.validate_config(dict(self.config,**{key:value}))
-            self.assertEqual(launcher.validate_config(dict(self.config,**{key:1}))[key],1)
-
     def test_stage_failure_is_exposed_for_copying(self):
         error='RuntimeError: Switch failed; previous session restored. STAGE_TIMEOUT: display did not finish in 35 seconds'
         reply=subprocess.CompletedProcess([],1,stdout='',stderr=error)
@@ -64,7 +58,7 @@ class ManagerTests(unittest.TestCase):
 
     def test_existing_steam_connects_without_gpu_apply(self):
         with patch.object(steam_manager,'prepare_remote',return_value=self.ready) as prepare,patch.object(steam_manager,'request') as apply,patch.object(steam_manager,'connect_client',return_value='connected'):
-            self.assertEqual(steam_manager.connect_server(self.config,0,1),'connected')
+            self.assertEqual(steam_manager.connect_server(self.config),'connected')
             prepare.assert_called_once();self.assertTrue(prepare.call_args.kwargs['check_only']);apply.assert_not_called()
 
     def test_fresh_moonlight_waits_for_a_fresh_udp_transport(self):
@@ -86,10 +80,16 @@ class ManagerTests(unittest.TestCase):
             steam_manager.connect_server(self.config,0,1)
             apply.assert_called_once_with(self.config,'apply',0,1)
 
-    def test_missing_stream_repairs_existing_mapping(self):
-        with patch.object(steam_manager,'prepare_remote',side_effect=[dict(self.ready,sunshine_ready=False),self.ready]) as prepare,patch.object(steam_manager,'request') as apply,patch.object(steam_manager,'connect_client',return_value='connected'):
-            steam_manager.connect_server(self.config)
-            self.assertFalse(prepare.call_args.kwargs['check_only']);apply.assert_not_called()
+    def test_missing_component_or_explicit_switch_requires_both_choices(self):
+        cases=[(dict(self.ready,steam_ready=False),False),
+               (dict(self.ready,sunshine_ready=False),False),
+               (dict(self.ready,display_ready=False),False),
+               (self.ready,True)]
+        for ready,apply_gpus in cases:
+            with self.subTest(ready=ready,apply_gpus=apply_gpus),patch.object(steam_manager,'prepare_remote',return_value=ready) as prepare,patch.object(steam_manager,'request') as apply:
+                with self.assertRaisesRegex(RuntimeError,'手动选择'):
+                    steam_manager.connect_server(self.config,0,None,apply_gpus=apply_gpus)
+                self.assertTrue(prepare.call_args.kwargs['check_only']);apply.assert_not_called()
 
     def test_close_stopped_server_is_read_only(self):
         value={'steam_running':False,'sunshine_running':False,'display_running':False,'game_running':False}

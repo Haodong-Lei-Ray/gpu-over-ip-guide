@@ -103,9 +103,9 @@ python scripts/open_remote_steam.py --config private/launcher.json --check-only
 pythonw scripts/open_remote_steam.py --config private/launcher.json
 ```
 
-本地 agent 只需为第二条命令创建一个桌面“远程 Steam 管理器”快捷方式，工作目录设成本地项目目录。开机后让既有 VPN 就绪，打开管理器：选择服务器 → 查看同一窗口中的服务与四卡状态 → 点击“连接 / 启动 Steam”。已运行就直接连接 Moonlight；未运行则按所选渲染 / 编码 GPU 启动。它不执行 `-applaunch`，不自动启动任何游戏；用户在远端 Steam 库里选择游戏。首次 SSH、过期的 Steam 登录或系统权限提示仍由用户完成。
+本地 agent 只需为第二条命令创建一个桌面“远程 Steam 管理器”快捷方式，工作目录设成本地项目目录。开机后让既有 VPN 就绪，打开管理器：选择服务器 → 查看同一窗口中的服务与四卡状态 → 点击“连接 / 启动 Steam”。会话完整就绪时直接连接 Moonlight。启动或恢复前，手动选择渲染和编码 GPU。它不执行 `-applaunch`，不自动启动任何游戏；用户在远端 Steam 库里选择游戏。首次 SSH、过期的 Steam 登录或系统权限提示仍由用户完成。
 
-Steam 按 `/proc/<pid>/exe` 与 UID 检测，不按 `argv[0]` 或显示名称猜测；已有 Steam 但 Sunshine 缺失时，按现有显卡配置补启动串流，不重新选卡。
+Steam 按 `/proc/<pid>/exe` 与 UID 检测，不按 `argv[0]` 或显示名称猜测；Sunshine 或桌面缺失时，先手动选择两项 GPU，再恢复会话。
 
 `--check-only` 只读检查；`--prepare-only` 仅准备远端服务、不打开本地窗口。远端就绪入口须由 server agent 预先建立，公开脚本不是完整服务器安装器。
 
@@ -163,7 +163,7 @@ python scripts/open_remote_steam.py --servers private/servers.json --server lab-
 
 前提：远端已完成 server.md 的 D 节集成。显卡表格显示实际枚举到的所有 GPU，不限定恰好四张；每 10 秒刷新显存、GPU/编码利用率、温度和功耗。点击显卡后，下方进程详情显示 **PID、用户、原始名称、该卡上的显存占用**，可以选中复制；上方不再放置运行进程名称列，也不显示合成的 `python*` 别名。原始可执行路径优先读取 `/proc/PID/exe`，权限不足或进程已退出时保留 NVIDIA 提供的名称；用户名不能解析时显示 UID 或“未知”。
 
-每台服务器可在 `connection` 中设置 `"default_render_gpu": 1`、`"default_stream_gpu": 1`，让两个选择框和详情初始定位到 GPU 1。未设置时沿用远端当前配置；设置的卡不存在时回退到远端配置。默认值只预选，不会重启已有会话或覆盖你在窗口里重新选择的卡。
+打开管理器或切换服务器时，渲染和编码 GPU 选择框均留空。启动、恢复会话或切卡前，请分别手动选择两项。刷新状态会保留你在当前窗口手选的值。完整就绪的会话可以直接连接。
 
 管理器中的状态、错误和进程详情可选中后按 **Ctrl+C**；显卡表格选中一行后按 **Ctrl+C**，复制带表头的制表符文本。任意区域右键可复制单元格、整行、整表、该区域文字或整个窗口，标题与按钮文字也能复制。**“复制全部信息” / Ctrl+Shift+C** 导出窗口当前内容；**“复制状态 / 错误”** 获取完整错误。错误区可滚动查看。复制结果可能包含私有地址、路径和进程信息，对外分享前请脱敏。
 
