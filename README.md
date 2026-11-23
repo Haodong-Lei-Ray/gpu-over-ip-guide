@@ -8,13 +8,15 @@
 
 | 文件 | 读者 | 作用 |
 | --- | --- | --- |
-| [client.md](client.md) | 本地 Windows client agent | 检查 SSH 与版本，建立隧道，选择远端 GPU，启动本地应用，验证真正使用了远端渲染；也包含 Moonlight 的连接与监控开关。 |
+| [client.md](client.md) | 本地 Windows / macOS client agent | 检查 SSH 与版本，建立隧道，选择远端 GPU，启动本地应用，验证真正使用了远端渲染；也包含 Moonlight 的连接与监控开关。 |
 | [server.md](server.md) | 远端 Linux server agent | 安装并隔离 Juice agent，核查驱动、GPU、文件描述符与监听地址；需要串流时再配置独立桌面、音频、Sunshine、Steam/Proton。 |
 | [index.html](index.html) | 人类操作者 | 可离线阅读的操作页。填写自己的参数，生成 SSH、启动与监控命令，查看退出、重连与排错说明。 |
 
 两端 agent 先各自阅读对应文件，再交换脱敏的就绪状态。HTML 不会替你执行命令，也不会上传填写的连接参数。
 
 日常使用：打开一个“远程 Steam 管理器”，在同一窗口从私有 `servers.json` 选择服务器，查看状态、连接/启动、切卡与关闭；完整就绪的会话可以直接连接。启动、恢复或切卡前，分别手动选择渲染和编码 GPU。渲染与串流编码可以分别选卡；显卡状态及 PID、用户、原始名称和显存占用在同一窗口查看。全屏按 **Ctrl + Alt + Shift + X**。远端是否就绪、按需恢复以及可选开机驻留/自动巡检，见 [server.md 的 C 节](server.md#c-怎样确认远端持续运行)。默认不会替用户开启驻留服务。
+
+macOS 用户可直接使用 Moonlight 和同一套远程 Steam 管理器，见 [macOS 安装与连接](client.md#macos-安装与连接)。
 
 ## 本次同步的入口与脚本
 
@@ -45,7 +47,7 @@ Linux:   Juice agent + NVIDIA GPU
 B. Sunshine + Moonlight / 远程串流
 Linux:   Steam + Proton + 完整游戏 + GPU 渲染 + NVENC
                     ↓ 视频/音频     ↑ 键鼠
-Windows: Moonlight
+Windows / macOS: Moonlight
 ```
 
 | 项目 | A：Juice 图形转发 | B：Moonlight 串流 |

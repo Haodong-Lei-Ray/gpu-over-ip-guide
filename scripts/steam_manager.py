@@ -1,4 +1,4 @@
-"""One Windows management window for all configured remote Steam servers."""
+"""One management window for all configured remote Steam servers."""
 import logging
 from pathlib import Path
 import queue

@@ -40,21 +40,36 @@ def udp_ready(path,generation):
 def ensure_transport(config,new_session=False):
     settings=config.get('stream_tunnel')
     if not settings:return
-    from open_remote_steam import HIDDEN,powershell_json
+    from open_remote_steam import HIDDEN, mac_process_command, powershell_json
     record,request,ready=paths(config);ident=config['_server_id'];script=Path(__file__).resolve()
+    folder = Path(config['_client_state_dir'])
+    profile = config.get('_servers_file', str(folder / 'servers.json'))
+    command = [sys.executable, str(script), '--server', ident, '--profile', profile]
+    if sys.platform == 'darwin':
+        token = Path(settings['token_file'])
+        if not token.is_file() or token.stat().st_size != 32:
+            raise RuntimeError(f'SSH 串流通道需要两端一致的 32 字节 UDP token 文件：{token}')
     saved=read_json(record);live=False
     if saved.get('pid'):
-        item=powershell_json("[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); $p=Get-CimInstance Win32_Process -Filter 'ProcessId = "+str(int(saved['pid']))+"'; if($null -eq $p){Write-Output 'null'}else{$p | Select-Object CommandLine | ConvertTo-Json -Compress}")
-        live=bool(item and str(script).lower() in (item.get('CommandLine') or '').lower() and ident in item['CommandLine'])
+        if sys.platform == 'darwin':
+            args = ' ' + ' '.join(command[1:])
+            actual = mac_process_command(saved['pid'])
+            # Framework Python can replace argv[0] when it execs Python.app.
+            live = actual.endswith(args) and Path(actual[:-len(args)]).name.lower().startswith('python')
+        else:
+            item=powershell_json("[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); $p=Get-CimInstance Win32_Process -Filter 'ProcessId = "+str(int(saved['pid']))+"'; if($null -eq $p){Write-Output 'null'}else{$p | Select-Object CommandLine | ConvertTo-Json -Compress}")
+            live=bool(item and str(script).lower() in (item.get('CommandLine') or '').lower() and ident in item['CommandLine'])
     if live and saved.get('version')!=VERSION:
         raise RuntimeError('旧版 SSH 串流通道仍在运行，需要先更新该通道再连接。')
     generation=read_json(request).get('generation')
     if new_session or not generation:
         generation=uuid.uuid4().hex;write_json(request,{'generation':generation})
     if not live:
-        folder=Path(config['_client_state_dir'])
-        child=subprocess.Popen([sys.executable,str(script),'--server',ident,'--profile',str(folder/'servers.json')],
-            cwd=folder,stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL,creationflags=HIDDEN)
+        child = subprocess.Popen(
+            command, cwd=folder, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL, creationflags=HIDDEN,
+            start_new_session=sys.platform == 'darwin',
+        )
         write_json(record,{'pid':child.pid,'version':VERSION})
     # A TCP listener alone is insufficient: wait for THIS generation to authenticate
     # and bind all local UDP sockets, with a fresh channel map for the next stream.

@@ -1,4 +1,4 @@
-"""Windows one-click remote Steam bootstrap. Configuration stays in private/.
+"""Windows and macOS one-click remote Steam bootstrap. Configuration stays in private/.
 
 Never starts a game, changes VPN settings, or replaces SSH authentication.
 Python 3.10+ and tkinter are required for the progress window.
@@ -82,7 +82,7 @@ def validate_config(config):
     workdir = Path(config.get("moonlight_workdir", str(executable.parent)))
     if not workdir.is_dir():
         raise ValueError("Moonlight working directory not found")
-    if config.get("portable", True) and not (workdir / "portable.dat").is_file():
+    if config.get("portable", sys.platform != "darwin") and not (workdir / "portable.dat").is_file():
         raise ValueError("portable.dat missing from Moonlight working directory")
     config["moonlight_workdir"] = str(workdir)
     for key in ('ssh_hostname','ssh_user'):
@@ -160,13 +160,42 @@ def prepare_remote(config, status, check_only=False):
     return outcome
 
 
+def mac_process_command(pid):
+    result = subprocess.run(
+        ["/bin/ps", "-ww", "-p", str(int(pid)), "-o", "args="],
+        capture_output=True, text=True, timeout=5,
+    )
+    if result.returncode == 1 and not result.stderr:
+        return ""
+    result.check_returncode()
+    return result.stdout.rstrip("\n")
+
+
+def mac_moonlight_processes(executable):
+    result = subprocess.run(
+        ["/bin/ps", "-axww", "-o", "pid=,comm="],
+        capture_output=True, text=True, check=True, timeout=5,
+    )
+    target = Path(executable).resolve()
+    processes = []
+    for line in result.stdout.splitlines():
+        pid, command = line.split(maxsplit=1)
+        if Path(command).name == target.name and Path(command).resolve() == target:
+            command_line = mac_process_command(pid)
+            if command_line:
+                processes.append({"Id": int(pid), "CommandLine": command_line})
+    return processes
+
+
 def moonlight_processes(executable):
     try:
+        if sys.platform == "darwin":
+            return mac_moonlight_processes(executable)
         processes = powershell_json("[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); $p=@(Get-CimInstance Win32_Process -Filter \"Name='Moonlight.exe'\" | Select-Object @{Name='Id';Expression={$_.ProcessId}},@{Name='Path';Expression={$_.ExecutablePath}},CommandLine); ConvertTo-Json -InputObject $p -Compress")
         if isinstance(processes, dict):
             processes = [processes]
         return [p for p in processes or [] if p.get("Path") and os.path.normcase(os.path.abspath(p["Path"])) == os.path.normcase(os.path.abspath(executable))]
-    except (RuntimeError, ValueError, subprocess.SubprocessError):
+    except (OSError, RuntimeError, ValueError, subprocess.SubprocessError):
         # Avoid creating a second stream when process state cannot be verified.
         raise RuntimeError("无法核对现有 Moonlight，请关闭旧客户端后再试。")
 
@@ -186,13 +215,14 @@ def connect_client(config, status):
     if running:
         try:active=json.loads(record.read_text(encoding='utf-8'))
         except (OSError,ValueError):active={}
-        expected=subprocess.list2cmdline([config['moonlight_host'],config['moonlight_app']])
+        target = [config['moonlight_host'], config['moonlight_app']]
+        expected = ' '.join(target) if sys.platform == 'darwin' else subprocess.list2cmdline(target)
         matching=[p for p in running if ' stream ' in (p.get('CommandLine') or '') and (p.get('CommandLine') or '').rstrip().endswith(' '+expected)]
         if matching:
             state_dir.mkdir(parents=True,exist_ok=True)
             record.write_text(json.dumps({'host':config['moonlight_host'],'app':config['moonlight_app'],'pid':matching[0]['Id']}),encoding='utf-8')
             return '远端 Steam 已就绪；所选服务器的 Moonlight 已打开，请切回该窗口。'
-        if active.get('host')==config['moonlight_host'] and active.get('app')==config['moonlight_app'] and any(p['Id']==active.get('pid') for p in running):
+        if sys.platform != 'darwin' and active.get('host')==config['moonlight_host'] and active.get('app')==config['moonlight_app'] and any(p['Id']==active.get('pid') for p in running):
             return '远端 Steam 已就绪；所选服务器的 Moonlight 已打开，请切回该窗口。'
         raise RuntimeError('Moonlight 已打开，但无法确认它连接的是所选服务器。请先断开并退出现有 Moonlight，再启动所选服务器，避免连接错主机。')
     status("Steam 已就绪，正在打开 Moonlight…")
@@ -203,11 +233,24 @@ def connect_client(config, status):
     return "已打开远端 Steam。请在游戏库选择你要玩的游戏。"
 
 
+def pair_client(config):
+    if moonlight_running(config['moonlight_exe']):
+        raise RuntimeError('请先退出 Moonlight，再为所选服务器配对。')
+    if config.get('stream_tunnel'):
+        from stream_transport import ensure_transport
+        ensure_transport(config)
+    return subprocess.call(
+        [config['moonlight_exe'], 'pair', config['moonlight_host']],
+        cwd=config['moonlight_workdir'],
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=Path(__file__).resolve().parents[1] / "private/launcher.json")
     parser.add_argument("--check-only", action="store_true", help="Read-only local/remote prerequisites check")
     parser.add_argument("--prepare-only", action="store_true", help="Prepare remote Steam only; no client GUI or game launch")
+    parser.add_argument("--pair", action="store_true", help="Pair Moonlight with the selected running Sunshine host")
     parser.add_argument("--gpu-status", action="store_true")
     parser.add_argument("--render-gpu", type=int)
     parser.add_argument("--stream-gpu", type=int)
@@ -216,9 +259,12 @@ def main():
     parser.add_argument("--servers",type=Path,help="Private multi-server JSON; otherwise auto-detect private/servers.json for GUI startup")
     parser.add_argument("--server",help="Server id from the multi-server JSON; skips the server chooser")
     args = parser.parse_args()
-    args.config.parent.mkdir(parents=True, exist_ok=True)
-    logging.basicConfig(filename=args.config.parent / "launcher.log", level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", encoding="utf-8")
+    log_dir = (args.servers or args.config).parent
+    log_dir.mkdir(parents=True, exist_ok=True)
+    logging.basicConfig(filename=log_dir / "launcher.log", level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s", encoding="utf-8")
     cli=bool(args.check_only or args.prepare_only or args.gpu_status or args.plan_only or args.render_gpu is not None or args.stream_gpu is not None)
+    if args.pair and cli:
+        parser.error('--pair cannot be combined with readiness or GPU options')
     profiles=args.servers or (args.config.parent/'servers.json' if not cli or args.server else None)
     if profiles and (args.servers or profiles.is_file()):
         from server_profiles import resolve_server
@@ -228,6 +274,10 @@ def main():
     else:
         if args.server:parser.error('--server requires a servers.json configuration')
         config=load_config(args.config)
+    if args.pair:
+        if config.get('stream_tunnel') and '_servers_file' not in config:
+            parser.error('--pair with stream_tunnel requires --servers or private/servers.json')
+        sys.exit(pair_client(config))
     if args.gpu_status or args.plan_only or args.render_gpu is not None or args.stream_gpu is not None:
         from gpu_picker import request
         if args.gpu_status:
@@ -258,4 +308,7 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except (OSError, RuntimeError, ValueError) as error:
+        sys.exit(str(error))

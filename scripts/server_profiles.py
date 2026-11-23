@@ -1,4 +1,4 @@
-"""Private multi-server configuration and Windows server selection."""
+"""Private multi-server configuration and client server selection."""
 import json
 from pathlib import Path
 import re
@@ -31,6 +31,7 @@ def load_servers(path):
         config=validate_config(dict(connection))
         config['_server_id']=ident;config['_server_name']=name
         config['_client_state_dir']=str(path.parent)
+        config['_servers_file']=str(path)
         profiles.append({'id':ident,'name':name,'config':config})
     if not profiles:raise ValueError('Enable at least one server in servers.json')
     default=data.get('default_server')

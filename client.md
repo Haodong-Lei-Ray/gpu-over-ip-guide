@@ -92,6 +92,45 @@ Set-Location -LiteralPath 'C:\gpu-over-ip\moonlight'
 
 首次配对由用户在本地 Sunshine 管理页面提交当前 PIN。Steam 在远端单独登录，游戏在远端启动。对于 Proton，先确认兼容工具及它要求的 Steam Linux Runtime 已实际安装注册，再测试离线；本地 Windows 启动过不能代替远端首次准备。
 
+### macOS 安装与连接
+
+macOS 客户端使用原生 Moonlight 连接远端 Linux 上的 Sunshine / Steam。上文的 Juice 图形 API 转发步骤使用 Windows 客户端。
+
+通过 Homebrew 安装依赖，也可从 [Moonlight 官方发行页](https://github.com/moonlight-stream/moonlight-qt/releases) 下载 macOS DMG 并将应用放入 `/Applications`。
+
+```bash
+brew install --cask moonlight
+brew install python-tk@3.13
+mkdir -p private
+cp -n examples/servers.example.json private/servers.json
+```
+
+编辑本机 `private/servers.json`。在每个启用的服务器的 `connection` 内，将 Windows 安装项替换为以下字段，并填写该服务器实际的 SSH 地址、用户、端口、Moonlight 主机、Sunshine 应用名及远端目录。
+
+```json
+{
+  "moonlight_exe": "/Applications/Moonlight.app/Contents/MacOS/Moonlight",
+  "moonlight_workdir": "/Applications/Moonlight.app/Contents/MacOS",
+  "portable": false,
+  "direct_ssh_fallback": false
+}
+```
+
+Mac 使用系统 OpenSSH 和正常路由。首次连接先在终端核对 SSH 主机指纹，再确认对应密钥或 SSH agent 能通过 `ssh -o BatchMode=yes` 认证。配置了 `stream_tunnel` 的服务器还需将远端部署时已有的同一份 32 字节 token 通过 SSH/SFTP 复制到本机私有目录，并将 `token_file` 改为该文件的绝对路径。
+
+终端运行以下命令，或在 Finder 双击 `scripts/open_remote_steam.command` 打开管理器。
+
+```bash
+./scripts/open_remote_steam.command --server lab-a --check-only
+./scripts/open_remote_steam.command
+```
+
+首次配对时，确认远端 Sunshine 已运行，退出 Mac 上已经打开的 Moonlight，再执行下面的命令。启用隧道时，命令先建立通道，再通过配置中的本地回环地址和端口发起配对。将 Moonlight 显示的 PIN 提交到对应服务器的 Sunshine 管理页面，随后在管理器里点击“连接 / 启动 Steam”。
+
+```bash
+./scripts/open_remote_steam.command --server lab-a --pair
+```
+
 ### 日常一键启动远程 Steam
 
 完成 server 配置后，将 `examples/launcher.example.json` 复制为本机 `private/launcher.json` 并填写真实参数；此私有文件已被 Git 忽略。`remote_root` 是包含 `scripts/start-session.sh` 和 `runtime/steam-client` 的实际串流部署目录。
@@ -109,7 +148,7 @@ Steam 按 `/proc/<pid>/exe` 与 UID 检测，不按 `argv[0]` 或显示名称猜
 
 `--check-only` 只读检查；`--prepare-only` 仅准备远端服务、不打开本地窗口。远端就绪入口须由 server agent 预先建立，公开脚本不是完整服务器安装器。
 
-如果普通 SSH 被现有 VPN 路径影响，可在自己的配置中启用 `direct_ssh_fallback` 并填写与 SSH HostName 一致的 `direct_ssh_host`。它只在普通 SSH 连接失败后，为 SSH socket 绑定恰好一块启用的物理网卡；不修改路由或 VPN。多网卡、策略或网络环境不满足时会报错，不猜测接口，也不替 Moonlight UDP 改道。
+在 Windows 上，如果普通 SSH 被现有 VPN 路径影响，可在自己的配置中启用 `direct_ssh_fallback` 并填写与 SSH HostName 一致的 `direct_ssh_host`。它只在普通 SSH 连接失败后，为 SSH socket 绑定恰好一块启用的物理网卡；不修改路由或 VPN。多网卡、策略或网络环境不满足时会报错，不猜测接口，也不替 Moonlight UDP 改道。
 
 ### 多服务器配置与启动时选择
 

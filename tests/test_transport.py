@@ -17,6 +17,9 @@ import open_remote_steam as launcher
 
 class TransportTests(unittest.TestCase):
     def setUp(self):
+        platform = patch.object(transport.sys, 'platform', 'win32')
+        platform.start()
+        self.addCleanup(platform.stop)
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
         self.folder=Path(self.temp.name)
         self.config={'_client_state_dir':str(self.folder),'_server_id':'lab-a',
@@ -58,6 +61,24 @@ class TransportTests(unittest.TestCase):
             spawn.assert_called_once();self.assertEqual(transport.read_json(self.record)['pid'],88)
 
 
+    def test_macos_reuses_supervisor_for_the_selected_profile_file(self):
+        token = self.folder / 'test.token'
+        token.write_bytes(b'x' * 32)
+        self.config['stream_tunnel']['token_file'] = str(token)
+        profile = self.folder / 'mac profile.json'
+        self.config['_servers_file'] = str(profile)
+        command = f"/example/Python.app/Contents/MacOS/Python {Path(transport.__file__).resolve()} --server lab-a --profile {profile}"
+        with (
+            patch.object(transport.sys, 'platform', 'darwin'),
+            patch.object(launcher, 'mac_process_command', return_value=command) as inspect,
+            patch.object(transport, 'reachable', return_value=True),
+            patch.object(transport.subprocess, 'Popen') as spawn,
+        ):
+            transport.ensure_transport(self.config)
+        inspect.assert_called_once_with(77)
+        spawn.assert_not_called()
+
+
 class UdpRelayTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
@@ -75,7 +96,7 @@ class UdpRelayTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(self.base)
         self.token=b'x'*32;self.previous=bridge.PORTS;bridge.PORTS=(self.base+9,)
         self.addCleanup(setattr,bridge,'PORTS',self.previous)
-        self.server=await asyncio.start_server(lambda r,w:bridge.server_connection(r,w,self.token,'127.0.0.2'),'127.0.0.1',0)
+        self.server=await asyncio.start_server(lambda r,w:bridge.server_connection(r,w,self.token,'127.0.0.1'),'127.0.0.1',0)
         self.args=Namespace(tcp_port=self.server.sockets[0].getsockname()[1],base_port=self.base,ready_file=self.path,generation='new-stream')
 
     async def asyncTearDown(self):
@@ -85,7 +106,19 @@ class UdpRelayTests(unittest.IsolatedAsyncioTestCase):
         class Echo(asyncio.DatagramProtocol):
             def connection_made(self,t):self.transport=t
             def datagram_received(self,data,address):self.transport.sendto(data,address)
-        echo,_=await self.loop.create_datagram_endpoint(Echo,local_addr=('127.0.0.2',self.base+9))
+        echo, _ = await self.loop.create_datagram_endpoint(Echo, local_addr=('127.0.0.1', 0))
+        upstream = echo.get_extra_info('sockname')
+        create_endpoint = self.loop.create_datagram_endpoint
+
+        async def local_upstream(factory, **kwargs):
+            # Give the test upstream a separate port on the same loopback address.
+            if kwargs.get('remote_addr') == ('127.0.0.1', self.base + 9):
+                kwargs['remote_addr'] = upstream
+            return await create_endpoint(factory, **kwargs)
+
+        endpoints = patch.object(self.loop, 'create_datagram_endpoint', side_effect=local_upstream)
+        endpoints.start()
+        self.addCleanup(endpoints.stop)
         task=asyncio.create_task(bridge.client_session(self.args,self.token))
         sender=None
         try:
